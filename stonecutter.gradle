@@ -1,0 +1,252 @@
+// =====================================================================
+// Stonecutter controller — this IS the root project's build script.
+// (Stonecutter repoints rootProject.buildFileName here, so the old root
+// build.gradle config lives in this file now.)
+//
+// Holds: (a) the active version checked out in the IDE, (b) the shared
+// config applied to every loader node, (c) the shared-common source roots.
+// =====================================================================
+plugins {
+    id 'dev.kikugie.stonecutter'
+}
+
+// The version checked out in the IDE / used by a plain `build`. Switch with the
+// generated `stonecutterSwitchTo26_1_2` / `...26_2` tasks (or the IDE button).
+// A string LITERAL — Stonecutter rewrites it in place on switch. Groovy needs the
+// dot form (`stonecutter.active`, not the Kotlin infix `stonecutter active`).
+stonecutter.active '26.2'
+
+allprojects {
+    group = rootProject.mod_group_id
+    version = rootProject.mod_version
+}
+
+// Shared common source — pulled into every loader node (single copy -> no drift).
+// Dynamic, machine-independent paths (resolved from rootProject.projectDir).
+ext.commonJava = "${rootProject.projectDir}/common/src/main/java"
+ext.commonResources = "${rootProject.projectDir}/common/src/main/resources"
+
+subprojects {
+    apply plugin: 'java'
+
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(25)
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 25
+    }
+
+    repositories {
+        mavenLocal() // Neroland Core (nerolandcore-<loader>-<mc>) published locally; see USING-CORE.md
+        // Neroland Core from GitHub Packages — resolves in CI and on fresh clones, where mavenLocal is
+        // empty. mavenLocal() above still wins for local devs who run Core's publishToMavenLocal.
+        // Auth: gradle props gpr.user/gpr.key, else env GITHUB_ACTOR/GITHUB_TOKEN. Lazy getOrNull() so a
+        // local build that resolves Core from mavenLocal never needs a token. See USING-CORE.md.
+        maven {
+            name = 'NerolandCoreGitHubPackages'
+            url = 'https://maven.pkg.github.com/Neroland/neroland-core'
+            credentials {
+                username = providers.gradleProperty('gpr.user').orElse(providers.environmentVariable('GITHUB_ACTOR')).getOrNull()
+                password = providers.gradleProperty('gpr.key').orElse(providers.environmentVariable('GITHUB_TOKEN')).getOrNull()
+            }
+        }
+        mavenCentral()
+        maven { url 'https://maven.fabricmc.net/' }
+        maven { url 'https://maven.neoforged.net/releases/' }
+        maven { url 'https://maven.minecraftforge.net/' }
+        maven { name = 'BlameJared'; url = 'https://maven.blamejared.com/' } // JEI
+    }
+
+    // Generate static Eclipse projects (.project/.classpath) ONLY for the version
+    // NODES (:fabric:26.1.2, :neoforge:26.2, :forge:26.2, ...), NOT the branch-parent containers
+    // (:fabric / :neoforge / :forge) or root. A node lives INSIDE its branch dir
+    // (fabric/versions/26.2); if the branch parent ALSO carried a .project, the redhat
+    // Java extension would reject the nested node ("not a valid java project"). Keeping
+    // branch parents as plain folders lets VS Code import each node as a standalone project.
+    def isNode = project.parent != null && project.parent.parent != null
+    if (isNode) {
+        // Compute the unique name HERE (project = the Gradle project); inside
+        // `eclipse.project {}` `project` rebinds to the Eclipse model, which has no `parent`.
+        def nodeEclipseName = "nerolink-${project.parent.name}-${project.name}"
+        apply plugin: 'eclipse'
+        eclipse {
+            project {
+                // Multiple nodes share the leaf name ('26.1.2' under fabric/neoforge/forge);
+                // give each a unique Eclipse project name.
+                name = nodeEclipseName
+                // Strip Loom's Buildship nature so VS Code imports the static .classpath
+                // instead of attempting a live (failing) Gradle import.
+                file {
+                    whenMerged { proj ->
+                        proj.natures.removeAll { it.startsWith('org.eclipse.buildship') }
+                        proj.buildCommands.removeAll { it.name.startsWith('org.eclipse.buildship') }
+                    }
+                }
+            }
+            // SINGLE SOURCE OF TRUTH: merge tools/ecj.prefs into this node's generated
+            // .settings/org.eclipse.jdt.core.prefs so the VS Code Java language server applies the
+            // EXACT same compiler-problem severities (and disabled null analysis) as the `ecjCheck`
+            // Gradle task. Edit tools/ecj.prefs, re-run `./gradlew eclipse`, reload VS Code.
+            jdt {
+                file {
+                    withProperties { props ->
+                        def prefsFile = rootProject.file('tools/ecj.prefs')
+                        if (prefsFile.exists()) {
+                            def loaded = new Properties()
+                            prefsFile.withInputStream { loaded.load(it) }
+                            loaded.stringPropertyNames().each { k ->
+                                props.setProperty(k, loaded.getProperty(k))
+                            }
+                        }
+                    }
+                }
+            }
+            // De-duplicate source-folder classpath entries. Loom/ModDevGradle + the `eclipse` plugin
+            // can emit the SAME generated source dir twice (e.g. build/generated/sources/modMetadata
+            // and build/generated/stonecutter/main/resources — once as a real entry, once with
+            // excluding="**"), which Eclipse/VS Code rejects as "Build path contains duplicate entry"
+            // and refuses to build. Keep one entry per path, preferring the non-excluded (real) one.
+            classpath {
+                file {
+                    whenMerged { cp ->
+                        def byPath = [:]
+                        cp.entries.each { e ->
+                            if (e.kind == 'src') {
+                                def prev = byPath[e.path]
+                                if (prev == null) {
+                                    byPath[e.path] = e
+                                } else {
+                                    def prevAll = (prev.hasProperty('excludes') ? prev.excludes : []).contains('**')
+                                    def curAll = (e.hasProperty('excludes') ? e.excludes : []).contains('**')
+                                    if (prevAll && !curAll) {
+                                        byPath[e.path] = e
+                                    }
+                                }
+                            }
+                        }
+                        def keep = byPath.values() as Set
+                        cp.entries.removeAll { it.kind == 'src' && !keep.contains(it) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Bidirectional Blockbench <-> Java entity-model sync for the MULTILOADER.
+// Runs the shared tools/model_sync.py with --multiloader, so it operates on
+// common/src/main/java (the entity model classes carry the
+// model_sync:begin/end markers) + the repo-root art/blockbench/entity/*.bbmodel.
+// Standalone (NOT auto-wired into compileJava — keeps the green build free of a
+// hard Python requirement); run it deliberately when you edit a .bbmodel or the
+// marked Java cube block:
+//   ./gradlew syncModels                          # auto direction (newest wins)
+//   ./gradlew syncModels -PmodelSyncArgs=--check  # report drift, write nothing
+//   ./gradlew syncModels -PmodelSyncArgs=--to-java # force .bbmodel -> Java
+// Python is auto-detected (python/py/python3 + pyenv shims); override -PpythonCmd=.
+// ---------------------------------------------------------------------------
+tasks.register('syncModels') {
+    group = 'nerolink'
+    description = 'Sync entity-model Blockbench <-> Java for common (tools/model_sync.py --multiloader).'
+    // <repo> = the project root (now flattened); run python from there so tools/model_sync.py resolves.
+    def repoRoot = rootProject.projectDir
+    def pythonOverride = providers.gradleProperty('pythonCmd').getOrNull()
+    def isWindows = System.getProperty('os.name').toLowerCase().contains('win')
+    def pyenvRoot = System.getenv('PYENV_ROOT') ?: System.getenv('PYENV')
+    if (!pyenvRoot && System.getenv('USERPROFILE')) {
+        pyenvRoot = System.getenv('USERPROFILE') + '\\.pyenv\\pyenv-win'
+    }
+    if (!pyenvRoot && System.getenv('HOME')) {
+        pyenvRoot = System.getenv('HOME') + '/.pyenv'
+    }
+    def extra = (providers.gradleProperty('modelSyncArgs').getOrElse('')).split(' ').findAll { it } as List
+    doLast {
+        def wrap = { c -> isWindows ? (['cmd', '/c'] + c) : c }
+        def candidates = []
+        if (pythonOverride) candidates << [pythonOverride]
+        candidates += [['python'], ['py'], ['python3']]
+        if (pyenvRoot) {
+            def r = pyenvRoot.replaceAll(/[\\\/]+$/, '')
+            candidates << [r + (isWindows ? '\\shims\\python.bat' : '/shims/python')]
+            candidates << [r + (isWindows ? '\\bin\\python.exe' : '/bin/python')]
+        }
+        def python = null
+        for (c in candidates) {
+            try {
+                def probe = wrap(c + ['--version']).execute(null, repoRoot)
+                def o = new StringBuilder(); def e = new StringBuilder()
+                probe.consumeProcessOutput(o, e); probe.waitFor()
+                if (probe.exitValue() == 0) { python = c; break }
+            } catch (ignored) {}
+        }
+        if (python == null) {
+            throw new GradleException(
+                "model_sync: no Python found (tried ${candidates}); set -PpythonCmd=<path>. " +
+                "Detected pyenv root: ${pyenvRoot}")
+        }
+        def proc = wrap(python + ['tools/model_sync.py', '--multiloader'] + extra).execute(null, repoRoot)
+        def out = new StringBuilder(); def err = new StringBuilder()
+        proc.consumeProcessOutput(out, err)
+        proc.waitFor()
+        if (out.length() > 0) println out.toString().trim()
+        if (proc.exitValue() != 0) {
+            throw new GradleException("model_sync failed (exit ${proc.exitValue()}):\n${err}")
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Regenerate procedural textures + Blockbench block/item models for the MULTILOADER
+// (tools/gen_textures.py + gen_bbmodels.py with --multiloader). Both are ADDITIVE — they
+// skip any asset that already exists, so reruns only fill gaps and never overwrite
+// committed/edited art. gen_textures needs Pillow (skips gracefully without it). Run on
+// demand: `./gradlew genAssets`. Python auto-detected; override -PpythonCmd=.
+// ---------------------------------------------------------------------------
+tasks.register('genAssets') {
+    group = 'nerolink'
+    description = 'Regenerate textures + Blockbench block/item models into common (additive).'
+    def repoRoot = rootProject.projectDir
+    def pythonOverride = providers.gradleProperty('pythonCmd').getOrNull()
+    def isWindows = System.getProperty('os.name').toLowerCase().contains('win')
+    def pyenvRoot = System.getenv('PYENV_ROOT') ?: System.getenv('PYENV')
+    if (!pyenvRoot && System.getenv('USERPROFILE')) {
+        pyenvRoot = System.getenv('USERPROFILE') + '\\.pyenv\\pyenv-win'
+    }
+    if (!pyenvRoot && System.getenv('HOME')) {
+        pyenvRoot = System.getenv('HOME') + '/.pyenv'
+    }
+    doLast {
+        def wrap = { c -> isWindows ? (['cmd', '/c'] + c) : c }
+        def candidates = []
+        if (pythonOverride) candidates << [pythonOverride]
+        candidates += [['python'], ['py'], ['python3']]
+        if (pyenvRoot) {
+            def r = pyenvRoot.replaceAll(/[\\\/]+$/, '')
+            candidates << [r + (isWindows ? '\\shims\\python.bat' : '/shims/python')]
+            candidates << [r + (isWindows ? '\\bin\\python.exe' : '/bin/python')]
+        }
+        def python = null
+        for (c in candidates) {
+            try {
+                def probe = wrap(c + ['--version']).execute(null, repoRoot)
+                probe.consumeProcessOutput(new StringBuilder(), new StringBuilder()); probe.waitFor()
+                if (probe.exitValue() == 0) { python = c; break }
+            } catch (ignored) {}
+        }
+        if (python == null) {
+            throw new GradleException("genAssets: no Python found; set -PpythonCmd=<path>. pyenv root: ${pyenvRoot}")
+        }
+        ['tools/gen_textures.py', 'tools/gen_bbmodels.py'].each { script ->
+            def proc = wrap(python + [script, '--multiloader']).execute(null, repoRoot)
+            def out = new StringBuilder(); def err = new StringBuilder()
+            proc.consumeProcessOutput(out, err); proc.waitFor()
+            if (out.length() > 0) println out.toString().trim()
+            if (proc.exitValue() != 0) {
+                throw new GradleException("${script} failed (exit ${proc.exitValue()}):\n${err}")
+            }
+        }
+    }
+}

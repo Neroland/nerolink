@@ -1,0 +1,71 @@
+# Eclipse compiler (ECJ) analysis settings — the SINGLE SOURCE OF TRUTH for both the `ecjCheck`
+# Gradle task AND the VS Code Problems panel. stonecutter.gradle's `eclipse` hook copies every
+# `org.eclipse.jdt.core.compiler.*` key below into each node's generated
+# `.settings/org.eclipse.jdt.core.prefs`, so VS Code's Java language server and ecjCheck apply the
+# EXACT same diagnostics. Edit here, run `./gradlew eclipse`, reload VS Code.
+#
+# POLICY (clean-zero baseline): every category that has an ACTIONABLE code fix stays at `warning`
+# (and is kept fixed → currently 0). Categories that are pure FRAMEWORK-INTEROP or MC idioms — i.e.
+# they have NO fix in our code short of @SuppressWarnings / mis-annotation — are set to `ignore`.
+# That keeps the panel at 0 without suppressing anything actionable: real null derefs, dead code,
+# unused members, and raw uses of OUR OWN generics still surface and still get fixed.
+
+# --- Annotation-based null analysis: DISABLED (clean-zero policy) -----------------------------------
+# Rationale: with it ENABLED, ~99% of the diagnostics it produced were FRAMEWORK INTEROP that has no
+# code fix — "needs unchecked conversion to @NonNull X" (our @NullMarked code meeting Mojang/NeoForge's
+# partially-@NonNull API) plus "Illegal redefinition of parameter" on BER/JEI overrides of Mojang's
+# unannotated signatures. Those categories cannot all be downgraded to `ignore` (nullSpecViolation /
+# illegal-redefinition fall back to ERROR), and removing @NullMarked makes the count ~9x WORSE. The
+# genuine @Nullable deref bugs it once caught are already fixed in code with explicit guards. The
+# jspecify @NullMarked / @Nullable annotations REMAIN in the source as documentation; flip this back to
+# `enabled` (and restore a `-warn:+nullAnnot,+nullDereference` flag in the loader build.gradle ecjCheck
+# tasks) to turn the analysis on again. Non-null diagnostics below (unused, dead code, raw types,
+# unnecessary casts) stay ACTIVE — those are actionable and kept fixed.
+org.eclipse.jdt.core.compiler.annotation.nullanalysis=disabled
+org.eclipse.jdt.core.compiler.annotation.nullable=org.jspecify.annotations.Nullable
+org.eclipse.jdt.core.compiler.annotation.nonnull=org.jspecify.annotations.NonNull
+org.eclipse.jdt.core.compiler.annotation.nonnullbydefault=org.jspecify.annotations.NullMarked
+org.eclipse.jdt.core.compiler.annotation.nullable.secondary=org.jetbrains.annotations.Nullable,javax.annotation.Nullable,jakarta.annotation.Nullable
+org.eclipse.jdt.core.compiler.annotation.nonnull.secondary=org.jetbrains.annotations.NotNull,javax.annotation.Nonnull,jakarta.annotation.Nonnull
+org.eclipse.jdt.core.compiler.annotation.nonnullbydefault.secondary=org.eclipse.jdt.annotation.NonNullByDefault,javax.annotation.ParametersAreNonnullByDefault
+org.eclipse.jdt.core.compiler.annotation.inheritNullAnnotations=disabled
+org.eclipse.jdt.core.compiler.annotation.missingNonNullByDefaultAnnotation=ignore
+
+# --- ACTIONABLE null diagnostics — KEPT at `warning` (genuine @Nullable deref / dead-guard bugs;
+#     fixed in code with explicit guards, never suppressed). Currently 0.
+org.eclipse.jdt.core.compiler.problem.potentialNullReference=warning
+org.eclipse.jdt.core.compiler.problem.redundantNullCheck=warning
+org.eclipse.jdt.core.compiler.problem.nullReference=warning
+
+# --- FRAMEWORK-INTEROP null diagnostics — `ignore`. These fire ONLY where our @NullMarked code meets
+#     Mojang/NeoForge's partially-@NonNull API (codec/StreamCodec/BlockEntityType generics, BER/JEI
+#     override params). Empirically irreducible: removing @NullMarked makes them ~9x worse, and the
+#     only "fix" is @SuppressWarnings / mis-annotating our own types. No actionable code change exists.
+org.eclipse.jdt.core.compiler.problem.nullUncheckedConversion=ignore
+org.eclipse.jdt.core.compiler.problem.nullSpecViolation=ignore
+org.eclipse.jdt.core.compiler.problem.nullAnnotationInferenceConflict=ignore
+org.eclipse.jdt.core.compiler.problem.nonnullParameterAnnotationDropped=ignore
+org.eclipse.jdt.core.compiler.problem.annotatedTypeArgumentToUnannotated=ignore
+org.eclipse.jdt.core.compiler.problem.pessimisticNullAnalysisForFreeTypeVariables=ignore
+
+# --- ACTIONABLE unused / unnecessary / raw-type diagnostics — KEPT at `warning` (all fixed → 0).
+#     Raw uses of OUR OWN generics (e.g. GreenxertzCreatureRenderer<E>) are FIXED by parameterizing.
+org.eclipse.jdt.core.compiler.problem.unusedImport=warning
+org.eclipse.jdt.core.compiler.problem.unusedPrivateMember=warning
+org.eclipse.jdt.core.compiler.problem.unusedLocal=warning
+org.eclipse.jdt.core.compiler.problem.unusedWarningToken=warning
+org.eclipse.jdt.core.compiler.problem.unnecessaryTypeCheck=warning
+org.eclipse.jdt.core.compiler.problem.rawTypeReference=warning
+org.eclipse.jdt.core.compiler.problem.uncheckedTypeOperation=warning
+
+# --- MC-idiom / non-actionable noise — `ignore`.
+# - ECJ doesn't know javac's "this-escape" token, so it flags those @SuppressWarnings as unhandled.
+org.eclipse.jdt.core.compiler.problem.unhandledWarningToken=ignore
+# - Event/capability/codec lambdas routinely ignore parameters ((be, side) -> ...).
+org.eclipse.jdt.core.compiler.problem.unusedLambdaParameter=ignore
+# - `else` after a returning `if` is a deliberate readability style here.
+org.eclipse.jdt.core.compiler.problem.unnecessaryElse=ignore
+# - Mojang/NeoForge ship deprecated-but-required API surface; deprecation is unavoidable interop.
+org.eclipse.jdt.core.compiler.problem.deprecation=ignore
+org.eclipse.jdt.core.compiler.problem.forbiddenReference=ignore
+org.eclipse.jdt.core.compiler.problem.discouragedReference=ignore

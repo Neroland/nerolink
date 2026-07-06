@@ -1,0 +1,174 @@
+name: Sync Modrinth gallery
+
+# Mirrors the tracked gallery screenshots to the Modrinth project gallery whenever they change.
+# Modrinth has a gallery API (unlike CurseForge — the CF gallery stays a manual web upload, see
+# RELEASE_CHECKLIST.md §9.1a). To keep the gallery an exact mirror of the repo folder, this wipes
+# the existing gallery and re-uploads every PNG in a fixed order, featuring the first as the card.
+#
+# Source of truth: neoforge/versions/26.2/runs/client/screenshots/nerolink/*.png (written by the
+# /nerolink capture harness when run from the NeoForge 26.2 client).
+# Requires the same secrets as the description sync: MODRINTH_PROJECT_ID + MODRINTH_API_TOKEN.
+on:
+  push:
+    branches: [main, v1.0.0]
+    paths:
+      - neoforge/versions/26.2/runs/client/screenshots/nerolink/**
+      - .github/workflows/modrinth-gallery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Mirror gallery to Modrinth
+    runs-on: ubuntu-latest
+    env:
+      MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
+      MODRINTH_API_TOKEN: ${{ secrets.MODRINTH_API_TOKEN }}
+      UA: "Neroland/nerolink-ci (dario@neroland.co.za)"
+      DIR: neoforge/versions/26.2/runs/client/screenshots/nerolink
+      # Gallery order; the first present file becomes the featured card. Any PNG not listed here is
+      # appended afterwards in alphabetical order, so new shots still sync without editing this.
+      ORDER: "rocket_t4 rockets greenxertz_vista cindara_basin glacira_frost orbital_station terraform_after terraform_before machines solar pipes quarry_operating creatures star_guide launch_controller suits meteor_site blocks"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python (for image resizing)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Pillow
+        run: pip install --quiet Pillow
+
+      - name: Mirror screenshots to the Modrinth gallery
+        run: |
+          set -euo pipefail
+          if [ -z "$MODRINTH_PROJECT_ID" ] || [ -z "$MODRINTH_API_TOKEN" ]; then
+            echo "::error::MODRINTH_PROJECT_ID / MODRINTH_API_TOKEN secret missing."
+            exit 1
+          fi
+          if ! ls "$DIR"/*.png >/dev/null 2>&1; then
+            echo "::error::No PNGs in $DIR — nothing to sync."
+            exit 1
+          fi
+          API="https://api.modrinth.com/v2/project/${MODRINTH_PROJECT_ID}"
+
+          # Curated, evocative titles + descriptions per shot. Any shot not listed here falls back to a
+          # prettified filename + a generic description, so new captures still sync cleanly.
+          declare -A TITLE=(
+            [rocket_t4]="Heavy Launch Complex"
+            [rockets]="The Full Fleet"
+            [rocket_t1]="First Flight"
+            [rocket_o2]="Oxygen Fuelling"
+            [travel_node]="Travel Node"
+            [launch_controller]="Launch Controller"
+            [greenxertz_vista]="Greenxertz"
+            [cindara_basin]="Cindara"
+            [glacira_frost]="Glacira"
+            [orbital_station]="Orbital Station"
+            [terraform_after]="Terraformed: Living World"
+            [terraform_before]="Before Terraforming"
+            [machines]="The Machine Hall"
+            [machines_power]="Power Line"
+            [machines_refinery]="Fuel Refinery"
+            [solar]="Solar Arrays"
+            [solar_field]="Solar Field"
+            [pipes]="Universal Pipes"
+            [quarry_operating]="The Quarry"
+            [quarry_big]="Deep Claim"
+            [quarry_landmarks]="Quarry Landmarks"
+            [creatures]="Native Life"
+            [creatures_closeup]="Creatures Up Close"
+            [star_guide]="Star Guide"
+            [suits]="Survival Suits"
+            [meteor_site]="Meteor Strike"
+            [blocks]="Block Showcase"
+            [blocks_angle]="Blocks, Angled View"
+          )
+          declare -A DESC=(
+            [rocket_t4]="A Tier 4 rocket fuelled on its 5x5 pad with the animated service gantry alongside - the apex of the launch progression."
+            [rockets]="All four rocket tiers on the pad formations they each require, from the single-pad Tier 1 to the Heavy Launch Complex."
+            [rocket_t1]="The entry-tier Tier 1 rocket on its single launch pad with a pad-side fuel tank."
+            [rocket_o2]="A gas line topping up a docked rocket's onboard oxygen tank before launch."
+            [travel_node]="A commissioned landing pad - name-tag any launch pad to register a pad-to-pad destination."
+            [launch_controller]="The holographic pad-builder console projecting a Tier 3 footprint preview, materials loaded and ready to assemble."
+            [greenxertz_vista]="The verdant steel-and-quartz world of Greenxertz, home to Xertz Stalkers and Quartz Crawlers."
+            [cindara_basin]="A volcanic basin of cindrite and ash on Cindara, where Cinder Stalkers prowl the dark."
+            [glacira_frost]="The frozen moon Glacira, its glacite glittering against the starfield under the watch of Frost Striders."
+            [orbital_station]="A founded station - floor, walls and a bound Station Core - adrift in the orbital void."
+            [terraform_after]="Barren ground reborn as a neon-emerald meadow with grass, trees and grazing Meadow Lopers."
+            [terraform_before]="The same plot before the Terraformer runs - bare coarse earth awaiting life."
+            [machines]="Generators, grinder, refinery and terraformer all running, laced together with Universal Pipes."
+            [machines_power]="A Combustion Generator feeding a Nerosium Grinder, with a Passive Generator topping up the grid."
+            [machines_refinery]="Coal and catalyst refined into rocket fuel and piped straight into a holding tank."
+            [solar]="Single panels and seam-joined fields across all three tiers, decks tracking the sun in unison."
+            [solar_field]="Multiple panels tiling into one continuous sun-tracking surface."
+            [pipes]="One pipe, four resource layers - energy, fluid, gas and items flowing from source to sink."
+            [quarry_operating]="A powered quarry mid-dig: glowing frame, tracking drill head and a deepening pit."
+            [quarry_big]="A 33x33 quarry claim, its frame ring spanning the horizon."
+            [quarry_landmarks]="Three landmarks projecting marker lasers to stake out a dig area."
+            [creatures]="The native creatures of the NeroLink worlds, from Xertz Stalkers to Woolly Drifts."
+            [creatures_closeup]="A closer look down the line of native fauna."
+            [star_guide]="The Star Guide progression pedestal, its next-step hologram spinning above an installed guide."
+            [suits]="Every survival suit on display: Oxygen, Tier 2, Thermal and Cryo."
+            [meteor_site]="A crash crater around a loot-bearing meteor core, a frozen meteor hanging overhead."
+            [blocks]="Every NeroLink block, floated for a clear look at all six faces."
+            [blocks_angle]="The block showcase grid from a low three-quarter angle."
+          )
+
+          # Build the ordered file list: preferred names first (if present), then any remaining PNGs.
+          # (if/then, not `test && cmd`, so a missing preferred shot doesn't trip `set -e`.)
+          mapfile -t files < <(
+            for name in $ORDER; do
+              if [ -f "$DIR/$name.png" ]; then echo "$DIR/$name.png"; fi
+            done
+            for f in $(ls "$DIR"/*.png | sort); do
+              base=$(basename "$f" .png)
+              case " $ORDER " in *" $base "*) ;; *) echo "$f" ;; esac
+            done
+          )
+          echo "Syncing ${#files[@]} image(s): ${files[*]}"
+
+          # 1. Wipe the existing gallery so the result is an exact mirror of the repo folder.
+          curl -sS -H "User-Agent: $UA" -H "Authorization: $MODRINTH_API_TOKEN" "$API" \
+            | jq -r '.gallery[].url' \
+            | while read -r url; do
+                if [ -z "$url" ]; then continue; fi
+                enc=$(jq -rn --arg u "$url" '$u|@uri')
+                echo "Deleting gallery item: $url"
+                curl -sS -X DELETE -H "User-Agent: $UA" -H "Authorization: $MODRINTH_API_TOKEN" \
+                  "$API/gallery?url=$enc"
+              done
+
+          # 2. Upload each file: ordered, first one featured. Title + description from the maps above.
+          # Modrinth caps gallery images at 5 MiB but the raw screenshots are 6–8 MiB PNGs, so upload a
+          # web copy: cap width at 1920px and recompress to JPEG q88 (visually lossless for screenshots,
+          # well under the cap). Uses Python+Pillow (installed above) — robust vs the runner missing
+          # ImageMagick/ffmpeg. The repo keeps the full-res PNGs for the CurseForge gallery.
+          i=0
+          for f in "${files[@]}"; do
+            base=$(basename "$f" .png)
+            title=${TITLE[$base]:-$(echo "$base" | sed -E 's/[-_]/ /g; s/\b(.)/\u\1/g')}
+            desc=${DESC[$base]:-"A scene from the NeroLink space-tech mod."}
+            tenc=$(jq -rn --arg t "$title" '$t|@uri')
+            denc=$(jq -rn --arg d "$desc" '$d|@uri')
+            featured=false
+            if [ "$i" -eq 0 ]; then featured=true; fi
+            up="$RUNNER_TEMP/$base.jpg"
+            python -c "import sys; from PIL import Image; s,d=sys.argv[1],sys.argv[2]; im=Image.open(s).convert('RGB'); w,h=im.size; im=(im.resize((1920,round(h*1920/w)),Image.LANCZOS) if w>1920 else im); im.save(d,'JPEG',quality=88,optimize=True)" "$f" "$up"
+            code=$(curl -sS -o resp.txt -w "%{http_code}" -X POST \
+              -H "User-Agent: $UA" -H "Authorization: $MODRINTH_API_TOKEN" -H "Content-Type: image/jpeg" \
+              --data-binary @"$up" \
+              "$API/gallery?ext=jpg&featured=$featured&title=$tenc&description=$denc&ordering=$i")
+            if [ "$code" != "204" ]; then
+              echo "::error::Upload of $f failed (HTTP $code)"; cat resp.txt; exit 1
+            fi
+            echo "Uploaded $f as $(du -h "$up" | cut -f1) JPEG (featured=$featured, ordering=$i, title=\"$title\")"
+            i=$((i + 1))
+          done
+          echo "Modrinth gallery synced: $i image(s)."

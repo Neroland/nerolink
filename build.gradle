@@ -1,0 +1,11 @@
+// =====================================================================
+// Intentionally inert.
+//
+// Stonecutter repoints rootProject.buildFileName to `stonecutter.gradle`
+// (see settings.gradle), so THIS file is no longer the root build script.
+// All shared root config (allprojects/subprojects, java toolchain, the
+// Buildship-nature strip, repositories, and the shared-common source roots
+// ext.commonJava/ext.commonResources) now lives in stonecutter.gradle.
+//
+// Kept (rather than deleted) only because the repo mount blocks unlink.
+// =====================================================================

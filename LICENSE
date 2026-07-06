@@ -1,0 +1,98 @@
+Nerospace License
+=================
+
+Copyright (c) 2026 Dario Maselli ("Neroland"). All Rights Reserved.
+
+"Nerospace" (the "Mod") means this Minecraft modification, including its
+source code, compiled builds (jars), textures, models, sounds, names, and
+all other original assets in this repository.
+
+"Official Sources" means the distribution channels operated or authorised
+by the copyright holder, currently:
+
+- CurseForge:      <https://www.curseforge.com/minecraft/mc-mods/nerospace>
+- Modrinth:        <https://modrinth.com/mod/nerospace>
+- GitHub releases: <https://github.com/Neroland/nerospace/releases>
+
+The Mod is source-available, not open source: you can read and learn from
+everything here, but the rights granted below are the only rights granted.
+
+1. WHAT YOU MAY DO (no permission needed)
+
+-----------------------------------------
+
+a) USE & PLAY. Use the Mod in single-player or on any server, private or
+   public, free or monetised.
+
+b) MODPACKS — allowed and encouraged. You may include the Mod in any
+   modpack, on any platform (CurseForge, Modrinth, private packs, server
+   packs), without asking first, provided that:
+     - the Mod's jar is the unmodified official file, originating from an
+       Official Source (packs that reference the official file by
+       download — e.g. CurseForge/Modrinth pack manifests — satisfy this
+       automatically);
+     - you do not present the Mod as your own work; and
+     - the pack's listing credits "Nerospace by Neroland" with links to
+       the CurseForge page above and the GitHub repository
+       (<https://github.com/Neroland/nerospace>).
+
+c) CONTENT CREATION & COMMERCIAL USE. Create and monetise videos, streams,
+   screenshots, reviews, and other content featuring the Mod, and run the
+   Mod in commercial settings (e.g. monetised servers or events), provided
+   every copy of the Mod involved was obtained from an Official Source (or
+   through a modpack permitted by section 1(b)).
+
+d) SOURCE ACCESS & PRIVATE FORKS. View the source, fork the repository on
+   GitHub, and modify the Mod for your own private use (yourself and your
+   own server's players). Private modified builds must not be distributed
+   further.
+
+e) CONTRIBUTIONS. Submit issues and pull requests. By submitting a
+   contribution you grant the copyright holder a perpetual, worldwide,
+   royalty-free licence to use, modify, distribute, and relicense that
+   contribution as part of the Mod.
+
+1. WHAT YOU MAY NOT DO (without prior written permission)
+
+-----------------------------------------
+
+a) REDISTRIBUTION. Do not re-upload, mirror, re-host, or otherwise
+   redistribute the Mod's builds (original or modified) outside the
+   Official Sources, except as allowed by section 1(b) for modpacks.
+   This includes "rehost" sites and publishing builds of a fork — under
+   this name or any other name.
+
+b) DERIVATIVE WORKS. Do not use the Mod's code, textures, models, or
+   other assets in other projects, whether or not modified.
+
+c) MISREPRESENTATION. Do not claim authorship of the Mod or imply
+   endorsement by the copyright holder.
+
+Permission requests: open an issue at
+<https://github.com/Neroland/nerospace/issues> or email <info@neroland.co.za>.
+Permission is granted only when given explicitly and in writing.
+
+1. NO WARRANTY
+
+-----------------------------------------
+
+THE MOD IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
+OR IN CONNECTION WITH THE MOD OR THE USE OF OR OTHER DEALINGS IN THE MOD.
+
+1. NOTES
+
+-----------------------------------------
+
+- Minecraft is a trademark of Mojang AB / Microsoft. This Mod is not an
+  official Minecraft product and is not approved by or associated with
+  Mojang or Microsoft. Your use of Minecraft itself is governed by the
+  Minecraft EULA.
+- Forking this repository on GitHub is additionally covered by the GitHub
+  Terms of Service; this licence does not restrict rights GitHub's terms
+  grant for on-platform forks.
+- This licence may be updated for future versions of the Mod; the licence
+  shipped with a given version applies to that version.

@@ -1,0 +1,148 @@
+// forge: full MinecraftForge userdev via ForgeGradle 7. Shares the common module's
+// source directly (single copy -> no drift).
+
+plugins {
+    id 'net.minecraftforge.gradle'
+    id 'net.minecraftforge.jarjar'
+    id 'eclipse'
+}
+
+// MC version comes from the Stonecutter node (e.g. :forge:26.1.2), not a global property.
+def mc = stonecutter.current.version
+def forgeVersion = project.findProperty("forge_version_${mc}")
+def jeiVersion = project.findProperty("jei_version_${mc}")
+def nerolandcoreVersion = project.findProperty('nerolandcore_version')
+
+if (!forgeVersion) {
+    throw new GradleException("Missing forge_version_${mc} in gradle.properties")
+}
+
+// This node's projectDir is <loader>/versions/<v>; the authoritative loader source +
+// templates live in the BRANCH root (forge/). Resolve branch-root paths via the parent.
+def branchDir = project.parent.projectDir
+def forgeBuild = forgeVersion.toString().split('-', 2)[1]
+def forgeMajor = forgeBuild.split('\\.')[0]
+
+// Distinct, descriptive jar name per cell.
+base { archivesName = "nerolink-forge-${mc}" }
+
+// Enable Forge's Jar-in-Jar task for embedded Sentry, mirroring Fabric include and NeoForge JarJar.
+jarJar.register()
+
+// Pull in the shared common source + resources.
+sourceSets.main.java.srcDir rootProject.ext.commonJava
+sourceSets.main.resources.srcDir rootProject.ext.commonResources
+
+// Forge 26's ModLauncher builds a JPMS layer from the dev runtime classpath. If classes and
+// processed resources are separate entries, the mod's classes can be seen as module "main" while
+// mods.toml names the resources entry "nerolink", producing split-package startup failures.
+sourceSets.main.output.resourcesDir = sourceSets.main.java.classesDirectory.get().asFile
+
+minecraft {
+    runs {
+        configureEach {
+            workingDir = layout.projectDirectory.dir('runs/client')
+            systemProperty 'eventbus.api.strictRuntimeChecks', 'true'
+            systemProperty 'forge.enabledGameTestNamespaces', rootProject.mod_id
+
+            if (project.hasProperty('nerolinkDebug')) {
+                jvmArgs '-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005'
+            }
+        }
+
+        register('client')
+
+        register('server') {
+            workingDir = layout.projectDirectory.dir('runs/server')
+            args '--nogui'
+        }
+    }
+}
+
+repositories {
+    minecraft.mavenizer(it)
+    maven fg.forgeMaven
+    maven fg.minecraftLibsMaven
+    mavenCentral()
+    maven { name = 'BlameJared'; url = 'https://maven.blamejared.com/' }
+}
+
+dependencies {
+    implementation minecraft.dependency("net.minecraftforge:forge:${forgeVersion}")
+    annotationProcessor 'net.minecraftforge:eventbus-validator:7.0.5'
+
+    // Neroland Core — required shared foundation; NeroLink builds its bridge against Core's link API.
+    // Compile + dev-runtime classpath; NOT jar-in-jar — Core ships as its own mod. Resolved from
+    // mavenLocal() (local Core publishToMavenLocal) or GitHub Packages — see stonecutter.gradle.
+    implementation "za.co.neroland.nerolandcore:nerolandcore-forge-${mc}:${nerolandcoreVersion}"
+
+    implementation 'io.sentry:sentry:8.45.0'
+    jarJar(group: 'io.sentry', name: 'sentry', version: '8.45.0')
+
+    // JEI common API only; Forge 26.x loader artifacts are not yet published on the pinned JEI lines.
+    if (jeiVersion) {
+        compileOnly "mezz.jei:jei-${mc}-common-api:${jeiVersion}"
+    }
+}
+
+// Expand mods.toml from src/main/templates into generated resources.
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def props = [
+        mod_id                    : rootProject.mod_id,
+        mod_version               : rootProject.mod_version,
+        mod_name                  : rootProject.mod_name,
+        mod_authors               : rootProject.mod_authors,
+        mod_license               : rootProject.mod_license,
+        forge_loader_version_range: "[${forgeMajor},)",
+        minecraft_version_range   : "[${mc},)",
+    ]
+    inputs.properties(props)
+    expand(props)
+    from "${branchDir}/src/main/templates"
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+}
+sourceSets.main.resources.srcDir generateModMetadata
+
+// Pre-create run directories so VS Code debug-terminal cwd exists before first launch.
+def createForgeRunDirs = tasks.register('createForgeRunDirs') {
+    description = 'Pre-create Forge run directories so the IDE debug-terminal cwd exists before first launch.'
+    doLast {
+        file('runs/client').mkdirs()
+        file('runs/server').mkdirs()
+    }
+}
+tasks.matching { it.name == 'configureLaunch' }.configureEach { dependsOn createForgeRunDirs }
+
+// ecjCheck: run the Eclipse compiler over common + forge main sources, with the same prefs as VS Code.
+configurations {
+    ecj
+}
+dependencies {
+    ecj 'org.eclipse.jdt:ecj:+'
+}
+tasks.register('ecjCheck', JavaExec) {
+    group = 'verification'
+    description = 'Run the Eclipse (IDE) analyzer over common + forge main sources and report its diagnostics.'
+    notCompatibleWithConfigurationCache('assembles the analysis classpath at execution time')
+    dependsOn tasks.named('compileJava')
+    classpath = configurations.ecj
+    mainClass = 'org.eclipse.jdt.internal.compiler.batch.Main'
+    doFirst {
+        def analysisCp = (sourceSets.main.compileClasspath.files + sourceSets.main.output.files)
+                .findAll { it.exists() }
+                .join(File.pathSeparator)
+        def srcDirs = sourceSets.main.java.srcDirs.findAll { it.exists() }.collect { it.absolutePath }
+        args = [
+                '--release', '25',
+                '-proc:none',
+                '-d', 'none',
+                '-properties', rootProject.file('tools/ecj.prefs').absolutePath,
+                // No '-warn:' override — tools/ecj.prefs is the single source of truth for severities.
+                // A CLI -warn:+token forces a category ON regardless of the prefs `ignore`, so the
+                // framework-interop nullness categories would re-appear. nullanalysis=enabled in the
+                // prefs already turns annotation-based analysis on for the genuine categories.
+                '-annotationpath', 'CLASSPATH',
+                '-classpath', analysisCp,
+        ] + srcDirs
+    }
+}

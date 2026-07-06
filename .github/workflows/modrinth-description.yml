@@ -1,0 +1,112 @@
+name: Sync Modrinth project page
+
+# Pushes the full Modrinth project page from the repo whenever the sources change —
+# Modrinth's API supports writing all of this, unlike CurseForge's (see
+# RELEASE_CHECKLIST.md §12: the CurseForge page stays a manual paste/upload):
+#   - description body            <- art/modrinth_description.md
+#   - title, summary, categories,
+#     client/server environments,
+#     issue/source/wiki/Discord
+#     links, license              <- pinned in the payload below
+#   - project icon                <- art/logo/nerolink_logo_400.png
+# Icon note: Modrinth caps icons at 256 KiB, so we sync the 400×400 derivative,
+# not the 1024px master (which is over the limit).
+#
+# Requires repository secrets:
+#   MODRINTH_PROJECT_ID — project id (or slug) of https://modrinth.com/mod/nerolink
+#   MODRINTH_API_TOKEN  — a Modrinth PAT with the "Edit project details" scope
+on:
+  push:
+    branches: [main]
+    paths:
+      - art/modrinth_description.md
+      - art/logo/nerolink_logo.png
+      - art/logo/nerolink_logo_400.png
+      - .github/workflows/modrinth-description.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Patch project body
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: PATCH the Modrinth project metadata
+        env:
+          MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
+          MODRINTH_API_TOKEN: ${{ secrets.MODRINTH_API_TOKEN }}
+        run: |
+          if [ -z "$MODRINTH_PROJECT_ID" ] || [ -z "$MODRINTH_API_TOKEN" ]; then
+            echo "::error::MODRINTH_PROJECT_ID / MODRINTH_API_TOKEN secret missing."
+            exit 1
+          fi
+
+          # jq -Rs reads the description file as one string and JSON-escapes it
+          # safely; everything else is pinned here so the page can't drift from the
+          # repo (a fumbled UI edit gets corrected on the next sync run).
+          # license_id "LicenseRef-Custom" + license_url is Modrinth's "Custom
+          # License" — this is the field AutoMod's "Missing License" check reads.
+          jq -Rs '{
+            body: .,
+            title: "NeroLink",
+            description: "Mine alien ore, power up your machines, build rockets — then terraform a dead world until it rains.",
+            categories: ["technology", "worldgen", "adventure"],
+            client_side: "required",
+            server_side: "required",
+            issues_url: "https://github.com/Neroland/nerolink/issues",
+            source_url: "https://github.com/Neroland/nerolink",
+            wiki_url: "https://github.com/Neroland/nerolink/wiki",
+            discord_url: "https://discord.gg/ArPXvYUzJG",
+            license_id: "LicenseRef-Custom",
+            license_url: "https://github.com/Neroland/nerolink/blob/main/LICENSE"
+          }' art/modrinth_description.md > payload.json
+
+          HTTP_CODE=$(curl -sS -o response.txt -w "%{http_code}" \
+            -X PATCH "https://api.modrinth.com/v2/project/${MODRINTH_PROJECT_ID}" \
+            -H "Authorization: ${MODRINTH_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: Neroland/nerolink-ci (dario@neroland.co.za)" \
+            --data @payload.json)
+
+          if [ "$HTTP_CODE" != "204" ]; then
+            echo "::error::Modrinth API returned HTTP $HTTP_CODE"
+            cat response.txt
+            exit 1
+          fi
+          echo "Modrinth project metadata synced (HTTP 204)."
+
+      - name: PATCH the Modrinth project icon
+        env:
+          MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
+          MODRINTH_API_TOKEN: ${{ secrets.MODRINTH_API_TOKEN }}
+        run: |
+          ICON=art/logo/nerolink_logo_400.png
+
+          # Modrinth rejects icons over 256 KiB — fail with a clear message rather
+          # than an opaque API error if the regenerated logo ever outgrows the cap.
+          SIZE=$(stat -c%s "$ICON")
+          if [ "$SIZE" -gt 262144 ]; then
+            echo "::error::$ICON is ${SIZE} bytes (> 256 KiB Modrinth icon cap)."
+            exit 1
+          fi
+
+          HTTP_CODE=$(curl -sS -o response.txt -w "%{http_code}" \
+            -X PATCH "https://api.modrinth.com/v2/project/${MODRINTH_PROJECT_ID}/icon?ext=png" \
+            -H "Authorization: ${MODRINTH_API_TOKEN}" \
+            -H "Content-Type: image/png" \
+            -H "User-Agent: Neroland/nerolink-ci (dario@neroland.co.za)" \
+            --data-binary @"$ICON")
+
+          if [ "$HTTP_CODE" != "204" ]; then
+            echo "::error::Modrinth icon API returned HTTP $HTTP_CODE"
+            cat response.txt
+            exit 1
+          fi
+          echo "Modrinth icon synced (HTTP 204)."

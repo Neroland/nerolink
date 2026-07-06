@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & discussion
+    url: https://github.com/Neroland/nerolink/discussions
+    about: For general questions, ideas, and help — please use Discussions, not the issue tracker.
+  - name: 🪐 NeroLink Discord
+    url: https://discord.gg/ArPXvYUzJG
+    about: Chat with the community, share builds, and get help in real time.

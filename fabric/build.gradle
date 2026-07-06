@@ -1,0 +1,148 @@
+// fabric: Fabric Loom. De-obfuscated 26.x: NO `mappings` line. Shares the common
+// module's source directly (single copy -> no drift).
+
+plugins {
+    id 'net.fabricmc.fabric-loom'
+    id 'eclipse'   // for eclipse.synchronizationTasks (VS Code / Buildship import hook)
+}
+
+// MC version comes from the Stonecutter node (e.g. :fabric:26.1.2), not a global property.
+def mc = stonecutter.current.version
+def fabricApi = project.findProperty("fabric_api_version_${mc}")
+def jeiVersion = project.findProperty("jei_version_${mc}")
+def nerolandcoreVersion = project.findProperty('nerolandcore_version')
+
+// This node's projectDir is <loader>/versions/<v>; the authoritative loader source +
+// resources live in the BRANCH root (fabric/). Resolve branch-root paths via the parent.
+def branchDir = project.parent.projectDir
+
+// Distinct, descriptive jar name per cell (the node project is named after the MC version, so the
+// default jar would be "<mc>-<version>.jar" and COLLIDE with the neoforge cell of the same version).
+base { archivesName = "nerolink-fabric-${mc}" }
+
+// Pull in the shared common source + resources.
+sourceSets.main.java.srcDir rootProject.ext.commonJava
+sourceSets.main.resources.srcDir rootProject.ext.commonResources
+
+dependencies {
+    minecraft "com.mojang:minecraft:${mc}"
+    // NOTE: no `mappings` — de-obfuscated 26.x needs none (Fabric Loom 1.17+).
+    implementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+    if (fabricApi != null) {
+        implementation "net.fabricmc.fabric-api:fabric-api:${fabricApi}"
+    }
+
+    // Neroland Core — required shared foundation; NeroLink builds its bridge against Core's link API.
+    // Plain `implementation` (NOT modImplementation/include): this de-obf 26.x Loom setup omits
+    // `mappings`, so there is no intermediary->named remap and modImplementation is unavailable.
+    // Fabric Loader still discovers Core as a mod via its bundled fabric.mod.json. Resolved from
+    // mavenLocal() (local Core publishToMavenLocal) or GitHub Packages — see stonecutter.gradle.
+    implementation "za.co.neroland.nerolandcore:nerolandcore-fabric-${mc}:${nerolandcoreVersion}"
+
+    // Sentry SDK (telemetry/NeroLinkTelemetry): compile against it + embed it as a jar-in-jar so the
+    // shipped Fabric jar carries it. Counterpart to the NeoForge JarJar bundling.
+    implementation 'io.sentry:sentry:8.45.0'
+    include 'io.sentry:sentry:8.45.0'
+
+    // JEI (optional recipe-viewer compat). The shared compat/jei plugin lives in `common` and uses ONLY
+    // the loader-agnostic JEI common API; on Fabric it compiles against the common + fabric APIs and loads
+    // against the Fabric JEI mod at dev runtime. JEI is a soft dependency (compile-time API only; the mod
+    // is runtime-only). Same per-MC version as NeoForge (jei_version_<mc>, BlameJared maven from the root).
+    if (jeiVersion) {
+        compileOnly "mezz.jei:jei-${mc}-common-api:${jeiVersion}"
+        compileOnly "mezz.jei:jei-${mc}-fabric-api:${jeiVersion}"
+        runtimeOnly "mezz.jei:jei-${mc}-fabric:${jeiVersion}"
+    }
+}
+
+// Expand fabric.mod.json from src/main/templates into a generated resources dir.
+// The template is NOT under src/main/resources, so the IDE never copies a RAW
+// (token-laden) fabric.mod.json into bin/main. eclipse.synchronizationTasks runs
+// this on VS Code/Buildship import, so bin/main gets the EXPANDED manifest and
+// Run & Debug works — while values stay dynamic (sourced from gradle.properties).
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def props = [
+        mod_id               : rootProject.mod_id,
+        mod_version          : rootProject.mod_version,
+        mod_name             : rootProject.mod_name,
+        mod_authors          : rootProject.mod_authors,
+        mod_license          : rootProject.mod_license,
+        fabric_loader_version: rootProject.fabric_loader_version,
+        minecraft_version    : mc,
+    ]
+    inputs.properties(props)
+    expand(props)
+    from "${branchDir}/src/main/templates"
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+}
+sourceSets.main.resources.srcDir generateModMetadata
+eclipse.synchronizationTasks generateModMetadata
+
+loom {
+    accessWidenerPath = file("${branchDir}/src/main/resources/nerolink.accesswidener")
+
+    runs {
+        client {
+            client()
+            // Do NOT let Loom write Eclipse *.launch files — they embed absolute machine
+            // paths. The committed .vscode/launch.json (relative ${workspaceFolder}) is the
+            // single source of truth for run/debug.
+            ideConfigGenerated false
+            runDir 'runs/client'
+        }
+        server {
+            server()
+            ideConfigGenerated false
+            runDir 'runs/server'
+        }
+    }
+}
+
+// Loom creates each run's `runDir` lazily on first launch, but VS Code opens the
+// debug terminal in that cwd BEFORE the program starts — so a never-yet-run config
+// fails with "Starting directory (cwd) ... does not exist". Pre-create the dirs so
+// the cwd always exists. Wired into (a) the Fabric preLaunchTask `configureLaunch`
+// (runs before each launch) and (b) eclipse.synchronizationTasks (fresh IDE import).
+def createFabricRunDirs = tasks.register('createFabricRunDirs') {
+    description = 'Pre-create Loom run directories so the IDE debug-terminal cwd exists before first launch.'
+    doLast {
+        file('runs/client').mkdirs()
+        file('runs/server').mkdirs()
+    }
+}
+eclipse.synchronizationTasks createFabricRunDirs
+tasks.matching { it.name == 'configureLaunch' }.configureEach { dependsOn createFabricRunDirs }
+
+// ecjCheck: run the Eclipse compiler over common + fabric main sources, with the same prefs as VS Code.
+configurations {
+    ecj
+}
+dependencies {
+    ecj 'org.eclipse.jdt:ecj:+'
+}
+tasks.register('ecjCheck', JavaExec) {
+    group = 'verification'
+    description = 'Run the Eclipse (IDE) analyzer over common + fabric main sources and report its diagnostics.'
+    notCompatibleWithConfigurationCache('assembles the analysis classpath at execution time')
+    dependsOn tasks.named('compileJava')
+    classpath = configurations.ecj
+    mainClass = 'org.eclipse.jdt.internal.compiler.batch.Main'
+    doFirst {
+        def analysisCp = (sourceSets.main.compileClasspath.files + sourceSets.main.output.files)
+                .findAll { it.exists() }
+                .join(File.pathSeparator)
+        def srcDirs = sourceSets.main.java.srcDirs.findAll { it.exists() }.collect { it.absolutePath }
+        args = [
+                '--release', '25',
+                '-proc:none',
+                '-d', 'none',
+                '-properties', rootProject.file('tools/ecj.prefs').absolutePath,
+                // No '-warn:' override — tools/ecj.prefs is the single source of truth for severities.
+                // A CLI -warn:+token forces a category ON regardless of the prefs `ignore`, so the
+                // framework-interop nullness categories would re-appear. nullanalysis=enabled in the
+                // prefs already turns annotation-based analysis on for the genuine categories.
+                '-annotationpath', 'CLASSPATH',
+                '-classpath', analysisCp,
+        ] + srcDirs
+    }
+}

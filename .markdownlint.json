@@ -1,0 +1,7 @@
+{
+    "MD013": false,
+    "MD024": { "siblings_only": true },
+    "MD033": false,
+    "MD036": false,
+    "MD041": false,
+    "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint/v0.40.0/schema

@@ -1,0 +1,156 @@
+// neoforge: full NeoForge userdev via ModDevGradle. Shares the common module's
+// source directly (single copy -> no drift).
+//
+// 26.2 note: until NeoForge 26.2 is on the public Maven, self-build the 26.2.x
+// branch (`./gradlew :neoforge:publishToMavenLocal`) and set neo_version_26.2 to
+// the version it prints — mavenLocal() below resolves it.
+
+plugins {
+    id 'net.neoforged.moddev'
+}
+
+// MC version comes from the Stonecutter node (e.g. :neoforge:26.1.2), not a global property.
+def mc = stonecutter.current.version
+def neoVersion = project.findProperty("neo_version_${mc}")
+def jeiVersion = project.findProperty("jei_version_${mc}")
+def nerolandcoreVersion = project.findProperty('nerolandcore_version')
+
+// This node's projectDir is <loader>/versions/<v>; the authoritative loader source +
+// templates live in the BRANCH root (neoforge/). Resolve branch-root paths via the parent.
+def branchDir = project.parent.projectDir
+
+// Distinct, descriptive jar name per cell (the node project is named after the MC version, so the
+// default jar would be "<mc>-<version>.jar" and COLLIDE with the fabric cell of the same version).
+base { archivesName = "nerolink-neoforge-${mc}" }
+
+repositories {
+    mavenLocal() // resolves a self-built NeoForge 26.2 until the official jar drops
+}
+
+// Pull in the shared common source + resources.
+sourceSets.main.java.srcDir rootProject.ext.commonJava
+sourceSets.main.resources.srcDir rootProject.ext.commonResources
+
+dependencies {
+    // Neroland Core — required shared foundation; NeroLink builds its bridge against Core's link API.
+    // Compile + dev-runtime classpath; NOT jar-in-jar — Core ships as its own mod. Resolved from
+    // mavenLocal() (local Core publishToMavenLocal) or GitHub Packages — see stonecutter.gradle.
+    implementation "za.co.neroland.nerolandcore:nerolandcore-neoforge-${mc}:${nerolandcoreVersion}"
+
+    // Sentry SDK embedded via NeoForge JarJar so players need no extra download (JarJar dedupes if
+    // another mod also ships Sentry). Adds it to the compile classpath AND the mod jar.
+    jarJar(implementation('io.sentry:sentry:8.45.0'))
+
+    // JEI (optional recipe-viewer compat; the compat/jei plugin loads only when JEI is present). The API
+    // is compile-time; the full NeoForge artifact is runtime-only (dev/test) so it is never published as a
+    // hard dependency. Per-MC-version via jei_version_<mc> (BlameJared maven, inherited from the root).
+    if (jeiVersion) {
+        compileOnly "mezz.jei:jei-${mc}-common-api:${jeiVersion}"
+        compileOnly "mezz.jei:jei-${mc}-neoforge-api:${jeiVersion}"
+        runtimeOnly "mezz.jei:jei-${mc}-neoforge:${jeiVersion}"
+    }
+}
+
+// Expand neoforge.mods.toml from src/main/templates into a generated resources dir
+// (same pattern as the repo-root build). The template is NOT under src/main/resources,
+// so the IDE never copies a RAW (token-laden) mods.toml into bin/main;
+// neoForge.ideSyncTask runs this on IDE sync so bin/main gets the EXPANDED manifest
+// and Run & Debug works — values stay dynamic (from gradle.properties).
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def props = [
+        mod_id                 : rootProject.mod_id,
+        mod_version            : rootProject.mod_version,
+        mod_name               : rootProject.mod_name,
+        mod_authors            : rootProject.mod_authors,
+        mod_license            : rootProject.mod_license,
+        minecraft_version_range: "[${mc},)",
+    ]
+    inputs.properties(props)
+    expand(props)
+    from "${branchDir}/src/main/templates"
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+}
+sourceSets.main.resources.srcDir generateModMetadata
+
+neoForge {
+    version = neoVersion
+    ideSyncTask generateModMetadata
+
+    def at = rootProject.file('common/src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers.from(at.absolutePath)
+    }
+
+    runs {
+        client {
+            client()
+            gameDirectory = file('runs/client')
+        }
+        server {
+            server()
+            gameDirectory = file('runs/server')
+        }
+
+        // Stop ModDevGradle from (re)generating absolute, machine-specific
+        // "neoforge - Client/Server" entries into multiloader/.vscode/launch.json
+        // on every Gradle/IDE sync. The committed relative configs
+        // (${workspaceFolder} + preLaunchTask) are the source of truth.
+        // Mirrors the root build's runs.configureEach { disableIdeRun() }.
+        configureEach {
+            disableIdeRun()
+            // ModDevGradle run tasks IGNORE Gradle's `--debug-jvm` (unlike Fabric Loom), so VS Code
+            // can't attach. Opt-in JDWP agent instead: the 'ML: Debug NeoForge ...' tasks pass
+            // `-PnerolinkDebug`, which makes the game JVM suspend listening on :5005 so the matching
+            // 'Debug: NeoForge ...' attach config can connect. No effect on normal runs/builds.
+            if (project.hasProperty('nerolinkDebug')) {
+                jvmArguments.add('-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005')
+            }
+        }
+    }
+
+    mods {
+        "${rootProject.mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+// ecjCheck: run the Eclipse compiler (the SAME analyzer VS Code's Java extension uses) over the shared
+// common + neoforge main sources, with the repo-root tools/ecj.prefs mirroring the IDE's diagnostic
+// settings. Surfaces Problems-panel diagnostics (null analysis, unused members, unnecessary
+// suppressions, ...) from the command line / gradle MCP. Warnings are reported in the log; the task only
+// FAILS on real errors. The NeoForge module is analysed because its compile classpath resolves the full
+// vanilla + NeoForge API (common alone is raw vanilla and won't resolve loader-facing references), and
+// its main sourceSet already includes the common sources (srcDir above). Mirrors the repo-root ecjCheck.
+configurations {
+    ecj
+}
+dependencies {
+    ecj 'org.eclipse.jdt:ecj:+'
+}
+tasks.register('ecjCheck', JavaExec) {
+    group = 'verification'
+    description = 'Run the Eclipse (IDE) analyzer over common + neoforge main sources and report its diagnostics.'
+    notCompatibleWithConfigurationCache('assembles the analysis classpath at execution time')
+    dependsOn tasks.named('compileJava')
+    classpath = configurations.ecj
+    mainClass = 'org.eclipse.jdt.internal.compiler.batch.Main'
+    doFirst {
+        def analysisCp = (sourceSets.main.compileClasspath.files + sourceSets.main.output.files)
+                .findAll { it.exists() }
+                .join(File.pathSeparator)
+        def srcDirs = sourceSets.main.java.srcDirs.findAll { it.exists() }.collect { it.absolutePath }
+        args = [
+                '--release', '25',
+                '-proc:none',
+                '-d', 'none',
+                '-properties', rootProject.file('tools/ecj.prefs').absolutePath,
+                // No '-warn:' override — tools/ecj.prefs is the single source of truth for severities.
+                // A CLI -warn:+token forces a category ON regardless of the prefs `ignore`, so the
+                // framework-interop nullness categories would re-appear. nullanalysis=enabled in the
+                // prefs already turns annotation-based analysis on for the genuine categories.
+                '-annotationpath', 'CLASSPATH',
+                '-classpath', analysisCp,
+        ] + srcDirs
+    }
+}

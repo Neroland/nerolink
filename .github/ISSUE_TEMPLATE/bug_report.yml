@@ -1,0 +1,57 @@
+name: "🐞 Bug Report"
+description: Report something that isn't working as expected.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve **NeroLink**!
+
+        Please search existing issues first to avoid duplicates. For questions or general
+        discussion, use [Discussions](https://github.com/Neroland/nerolink/discussions) or the
+        [Discord](https://discord.gg/ArPXvYUzJG) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected to happen instead.
+      placeholder: When I right-click the Oxygen Generator, ...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce it?
+      placeholder: |
+        1. Craft a ...
+        2. Place it ...
+        3. See error
+    validations:
+      required: true
+  - type: input
+    id: mod-version
+    attributes:
+      label: NeroLink version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: loader-version
+    attributes:
+      label: Minecraft + NeoForge version
+      placeholder: Minecraft 26.1.2, NeoForge 26.1.2.75
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / crash report
+      description: Paste relevant logs or a crash report (or a link to a paste). Code blocks are auto-formatted.
+      render: text
+  - type: textarea
+    id: other-mods
+    attributes:
+      label: Other mods installed
+      description: List other mods if any — issues sometimes come from interactions.

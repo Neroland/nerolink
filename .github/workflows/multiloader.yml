@@ -1,0 +1,128 @@
+name: Multiloader Build
+
+# Builds the flattened multiloader root — MultiLoader-Template layout
+# (ModDevGradle common+neoforge, Fabric Loom fabric, ForgeGradle forge; no architectury-loom).
+#
+# STRICT: there is no continue-on-error, so ANY matrix cell that fails to build
+# fails the whole workflow. All six loader x version cells are verified buildable
+# from public artifacts:
+#   - neoforge @ 26.1.2  -> NeoForge 26.1.2.76
+#   - neoforge @ 26.2    -> NeoForge 26.2.0.6-beta (now on the public NeoForged Maven)
+#   - forge    @ 26.1.2  -> Forge 26.1.2-64.0.10
+#   - forge    @ 26.2    -> Forge 26.2-65.0.0
+#   - fabric   @ 26.2    -> Fabric Loom 1.17 + fabric-api 0.152.1+26.2 (de-obf, no mappings)
+#   - fabric   @ 26.1.2  -> Fabric Loom 1.17 + fabric-api 0.151.0+26.1.2; needs the access
+#                          widener (fabric/src/main/resources/nerolink.accesswidener) because
+#                          vanilla MC 26.1.2 kept BlockEntityType's constructor private
+#                          (Mojang made it public in 26.2; NeoForge widens it on both).
+
+on:
+  push:
+    paths:
+      - "common/**"
+      - "fabric/**"
+      - "neoforge/**"
+      - "forge/**"
+      - "gradle.properties"
+      - "settings.gradle"
+      - "stonecutter.gradle"
+      - "build.gradle"
+      - ".github/workflows/multiloader.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read   # resolve Neroland Core from GitHub Packages (see the build step)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.loader }} @ MC ${{ matrix.mc }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - loader: neoforge
+            mc: "26.1.2"
+          - loader: neoforge
+            mc: "26.2"
+          - loader: forge
+            mc: "26.1.2"
+          - loader: forge
+            mc: "26.2"
+          - loader: fabric
+            mc: "26.1.2"
+          - loader: fabric
+            mc: "26.2"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: "25"
+          distribution: "temurin"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Forge's userdev decompile (ForgeGradle Mavenizer) produces ~1.2 GB under
+      # ~/.gradle/caches/minecraftforge. setup-gradle does cache GRADLE_USER_HOME, but its key is
+      # branch-scoped and tied to the full Gradle-files hash, so a new branch/commit (e.g. the #6
+      # merge) misses it and re-runs the heavy COLD decompile — which is the step that was failing.
+      # Cache that output explicitly under a STABLE key (only the forge_version_* pins in
+      # gradle.properties move it), with a restore-keys fallback, so the decompile restores on every
+      # branch instead of re-running cold. Seed it once on the default branch and all branches read it.
+      - name: Cache Forge userdev (Mavenizer decompile)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches/minecraftforge
+            .gradle/mavenizer
+          key: mcmaven-${{ runner.os }}-${{ hashFiles('gradle.properties') }}
+          restore-keys: |
+            mcmaven-${{ runner.os }}-
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      # --- Neroland Core dependency ---
+      # Core is consumed as a published Maven artifact from GitHub Packages (see the
+      # NerolandCoreGitHubPackages repo in stonecutter.gradle). The version comes solely from
+      # nerolandcore_version in gradle.properties — no Core checkout/build here, so no pinned-ref
+      # drift. Gradle reads GITHUB_ACTOR/GITHUB_TOKEN below to authenticate the package read. The
+      # package must be readable by this repo (Core package = Internal visibility, or granted),
+      # otherwise add an org PAT secret with read:packages and use it in place of GITHUB_TOKEN.
+      # See USING-CORE.md.
+      # --- end Neroland Core dependency ---
+
+      - name: Build ${{ matrix.loader }} for MC ${{ matrix.mc }}
+        # Stonecutter: each loader x MC version is its own node (:loader:version:build).
+        # The old `-Pminecraft_version` axis is gone — the node path selects the version.
+        # This workflow only VERIFIES that each cell builds; it uploads no artifacts (the Publish
+        # workflow owns distributables). A green build here is the whole signal.
+        #
+        # The Forge Mavenizer decompiles vanilla in a FORKED JVM that has no explicit -Xmx, so it
+        # defaults to ~1/4 of physical RAM — ample on a dev box, too small on a CI runner, so the
+        # COLD `decompile` OOMs (this only needs to succeed ONCE; the cache step above then keeps it
+        # warm on every later run). JAVA_TOOL_OPTIONS is read by every forked JVM at startup, so it
+        # reaches that decompiler fork. The Gradle daemon keeps its explicit -Xmx3G (a later -Xmx
+        # wins), so only the otherwise-unbounded forks pick this up.
+        # NOTE: this is intentionally the ONLY change vs the failed attempt — that one also `rm -rf`'d
+        # the runner tool cache, the likely cause of its fast failure; that step is gone.
+        env:
+          JAVA_TOOL_OPTIONS: "-Xmx6g"
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          ./gradlew :${{ matrix.loader }}:${{ matrix.mc }}:build
+          --stacktrace

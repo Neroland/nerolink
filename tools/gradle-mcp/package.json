@@ -1,0 +1,11 @@
+{
+  "name": "nerospace-gradle-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local MCP server: runs gradlew on the dev machine + full markdownlint checks.",
+  "type": "commonjs",
+  "bin": { "nerospace-gradle-mcp": "server.js" },
+  "dependencies": {
+    "markdownlint": "^0.41.0"
+  }
+}

@@ -1,0 +1,59 @@
+### Gradle ###
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/**/build/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/**/out/
+
+.run/
+
+### Eclipse ###
+.apt_generated
+.classpath
+.eclipse/
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/**/bin/
+
+### VS Code ###
+# Ignore machine-specific VS Code state, but COMMIT the generic run configs (launch.json / tasks.json)
+# so contributors get working Run/Debug + the prepare-args preLaunchTask out of the box.
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+
+### Mac OS ###
+.DS_Store
+
+### Minecraft Modding ###
+run/*
+# Track the gallery screenshots (the capture harness writes here) so CI/listing automation can pick
+# them up. Everything else under run/ stays ignored. (Git needs each parent dir re-included.)
+!run/screenshots/
+run/screenshots/*
+!run/screenshots/nerolink/
+!**/src/**/run/
+**/src/generated/**/.cache/
+repo/
+!**/src/**/repo/
+PROJECT_PLAN.md
+/tools/__pycache__
+runs/
+# …but DO track the capture-harness gallery screenshots under the NeoForge
+# python caches (scripts)
+__pycache__/
+*.pyc
+
+# node deps (e.g. tools/gradle-mcp markdownlint)
+node_modules/

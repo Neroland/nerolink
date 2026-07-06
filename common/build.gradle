@@ -1,0 +1,28 @@
+// common: de-obfuscated vanilla Minecraft via NeoForm (no loader APIs here).
+// ModDevGradle in "NeoForm-only" mode (neoFormVersion without a NeoForge version)
+// gives official-named vanilla classes to compile shared code against. This
+// module's source is also pulled into :fabric and :neoforge (one copy, no drift).
+
+plugins {
+    id 'net.neoforged.moddev'
+}
+
+def mc = rootProject.minecraft_version
+
+neoForge {
+    // De-obfuscated vanilla base; 26.2 NeoForm is published (26.2-1).
+    neoFormVersion = project.findProperty("neo_form_version_${mc}")
+
+    def at = file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers.from(at.absolutePath)
+    }
+}
+
+dependencies {
+    // Sentry error-reporting SDK (telemetry/NeroLinkTelemetry). The telemetry core lives in common, so
+    // it compiles against the API here; each loader BUNDLES the jar (NeoForge JarJar / Fabric include).
+    // The core 'sentry' artifact is dependency-free. Privacy: opt-out config + nerolink-only filter +
+    // PII scrubbing (see PRIVACY.md).
+    compileOnly 'io.sentry:sentry:8.45.0'
+}

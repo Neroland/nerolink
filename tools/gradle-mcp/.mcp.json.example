@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "gradle": {
+      "command": "node",
+      "args": ["./tools/gradle-mcp/server.js"],
+      "env": {
+        "GRADLE_PROJECT_DIR": "."
+      }
+    }
+  }
+}

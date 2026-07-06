@@ -1,0 +1,48 @@
+name: "✨ Feature Request"
+description: Suggest an idea, mechanic, or improvement for NeroLink.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! 🚀
+
+        Suggestions directly shape what comes next — though not every idea will fit the mod's
+        direction. Please search existing issues first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem or gap does this address?
+      description: Is your request related to something missing or frustrating? Optional but helpful.
+      placeholder: There's no way to ...
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Describe the feature
+      description: What would you like to see? The clearer the better.
+      placeholder: Add a machine that ...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you thought about.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the mod does this touch?
+      options:
+        - Machines / automation
+        - Rockets / dimensions / stations
+        - Oxygen / space suits
+        - Terraforming
+        - Mobs / creatures
+        - Star Guide / progression
+        - World generation
+        - UI / visuals
+        - Other
+    validations:
+      required: true

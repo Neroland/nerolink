@@ -1,0 +1,61 @@
+name: Auto-assign
+
+# Automatically assigns dario-maselli to every newly opened issue and pull request.
+#
+# Uses pull_request_target (not pull_request) so PRs opened from forks are also
+# handled: pull_request_target runs in the context of the BASE repo and gets a
+# read/write token. This is safe because the workflow never checks out or runs
+# any code from the pull request; it only calls the issues API.
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign dario-maselli
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const assignee = 'dario-maselli';
+            const issueNumber = context.payload.issue?.number
+              ?? context.payload.pull_request?.number;
+            if (!issueNumber) {
+              core.info('No issue or PR number in payload; nothing to assign.');
+              return;
+            }
+
+            // GitHub silently ignores assignees who lack write access, so check
+            // first and log a clear message instead of failing silently.
+            let permission = 'none';
+            try {
+              const res = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: assignee,
+              });
+              permission = res.data.permission;
+            } catch (err) {
+              core.warning('Could not resolve permission for ' + assignee + ': ' + err.message);
+              return;
+            }
+
+            if (permission !== 'admin' && permission !== 'write') {
+              core.warning(assignee + ' lacks write access; skipping. Permission: ' + permission);
+              return;
+            }
+
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              assignees: [assignee],
+            });
+            core.info('Assigned ' + assignee + ' to number ' + issueNumber);

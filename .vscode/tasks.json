@@ -1,0 +1,184 @@
+{
+	"//": "Run/build/debug tasks for the FLATTENED cross-loader build (Stonecutter nodes). RUN tasks launch a cell's client via Gradle (no debugger). DEBUG tasks suspend the forked client JVM on :5005 and are BACKGROUND tasks whose problemMatcher signals 'ready' on the JVM's 'Listening for transport dt_socket' line — the matching 'Debug: ...' entries in launch.json use them as preLaunchTask, then attach to :5005. Re-run './gradlew eclipse' after dependency changes.",
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "ML: Run NeoForge Client - 26.1.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":neoforge:26.1.2:runClient"],
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "ML: Run NeoForge Client - 26.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":neoforge:26.2:runClient"],
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "ML: Run Fabric Client - 26.1.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":fabric:26.1.2:runClient"],
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "ML: Run Fabric Client - 26.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":fabric:26.2:runClient"],
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "ML: Run Forge Client - 26.1.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":forge:26.1.2:runClient"],
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "ML: Run Forge Client - 26.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":forge:26.2:runClient"],
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": []
+		},
+
+		{
+			"label": "ML: Debug NeoForge Client - 26.1.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":neoforge:26.1.2:runClient", "-PnerolinkDebug"],
+			"isBackground": true,
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": {
+				"pattern": { "regexp": "^____never____$", "file": 1, "line": 2, "column": 3, "message": 4 },
+				"background": { "activeOnStart": true, "beginsPattern": ".", "endsPattern": "Listening for transport dt_socket at address" }
+			}
+		},
+		{
+			"label": "ML: Debug NeoForge Client - 26.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":neoforge:26.2:runClient", "-PnerolinkDebug"],
+			"isBackground": true,
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": {
+				"pattern": { "regexp": "^____never____$", "file": 1, "line": 2, "column": 3, "message": 4 },
+				"background": { "activeOnStart": true, "beginsPattern": ".", "endsPattern": "Listening for transport dt_socket at address" }
+			}
+		},
+		{
+			"label": "ML: Debug Fabric Client - 26.1.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":fabric:26.1.2:runClient", "--debug-jvm"],
+			"isBackground": true,
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": {
+				"pattern": { "regexp": "^____never____$", "file": 1, "line": 2, "column": 3, "message": 4 },
+				"background": { "activeOnStart": true, "beginsPattern": ".", "endsPattern": "Listening for transport dt_socket at address" }
+			}
+		},
+		{
+			"label": "ML: Debug Fabric Client - 26.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":fabric:26.2:runClient", "--debug-jvm"],
+			"isBackground": true,
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": {
+				"pattern": { "regexp": "^____never____$", "file": 1, "line": 2, "column": 3, "message": 4 },
+				"background": { "activeOnStart": true, "beginsPattern": ".", "endsPattern": "Listening for transport dt_socket at address" }
+			}
+		},
+		{
+			"label": "ML: Debug Forge Client - 26.1.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":forge:26.1.2:runClient", "-PnerolinkDebug"],
+			"isBackground": true,
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": {
+				"pattern": { "regexp": "^____never____$", "file": 1, "line": 2, "column": 3, "message": 4 },
+				"background": { "activeOnStart": true, "beginsPattern": ".", "endsPattern": "Listening for transport dt_socket at address" }
+			}
+		},
+		{
+			"label": "ML: Debug Forge Client - 26.2",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":forge:26.2:runClient", "-PnerolinkDebug"],
+			"isBackground": true,
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": {
+				"pattern": { "regexp": "^____never____$", "file": 1, "line": 2, "column": 3, "message": 4 },
+				"background": { "activeOnStart": true, "beginsPattern": ".", "endsPattern": "Listening for transport dt_socket at address" }
+			}
+		},
+
+		{
+			"label": "ML: Run Server (pick loader+MC)",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":${input:mlLoader}:${input:mlMcVersion}:runServer"],
+			"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "ML: Build all 6 cells",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": [":neoforge:26.1.2:build", ":neoforge:26.2:build", ":forge:26.1.2:build", ":forge:26.2:build", ":fabric:26.1.2:build", ":fabric:26.2:build"],
+			"group": "build",
+			"presentation": { "reveal": "always", "panel": "shared", "clear": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "ML: Regenerate Eclipse classpaths (gradlew eclipse)",
+			"type": "process",
+			"command": "${workspaceFolder}/gradlew",
+			"windows": { "command": "${workspaceFolder}/gradlew.bat" },
+			"args": ["eclipse"],
+			"presentation": { "reveal": "always", "panel": "shared", "clear": true },
+			"problemMatcher": []
+		}
+	],
+	"inputs": [
+		{
+			"id": "mlMcVersion",
+			"type": "pickString",
+			"description": "Minecraft version",
+			"options": ["26.1.2", "26.2"],
+			"default": "26.2"
+		},
+		{
+			"id": "mlLoader",
+			"type": "pickString",
+			"description": "Loader",
+			"options": ["neoforge", "forge", "fabric"],
+			"default": "neoforge"
+		}
+	]
+}
