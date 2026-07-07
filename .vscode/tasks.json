@@ -156,6 +156,36 @@
 			"problemMatcher": []
 		},
 		{
+			"label": "Relay: start local relay (wrangler dev, ../nerolink-relay)",
+			"type": "shell",
+			"command": "npx wrangler dev --ip 0.0.0.0",
+			"options": { "cwd": "${workspaceFolder}/../nerolink-relay" },
+			"isBackground": true,
+			"presentation": { "reveal": "always", "panel": "dedicated" },
+			"problemMatcher": []
+		},
+		{
+			"label": "Relay: register + enable in dev runs (local relay)",
+			"type": "shell",
+			"command": "python tools/setup_dev_relay.py",
+			"presentation": { "reveal": "always", "panel": "shared", "clear": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "Relay: register + enable in dev runs (custom relay)",
+			"type": "shell",
+			"command": "python tools/setup_dev_relay.py --relay ${input:relayOrigin}",
+			"presentation": { "reveal": "always", "panel": "shared", "clear": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "Relay: disable in dev runs",
+			"type": "shell",
+			"command": "python tools/setup_dev_relay.py --off",
+			"presentation": { "reveal": "always", "panel": "shared", "clear": true },
+			"problemMatcher": []
+		},
+		{
 			"label": "ML: Regenerate Eclipse classpaths (gradlew eclipse)",
 			"type": "process",
 			"command": "${workspaceFolder}/gradlew",
@@ -166,6 +196,12 @@
 		}
 	],
 	"inputs": [
+		{
+			"id": "relayOrigin",
+			"type": "promptString",
+			"description": "Relay origin (e.g. https://nerorelay.neroserver.xyz)",
+			"default": "https://nerorelay.neroserver.xyz"
+		},
 		{
 			"id": "mlMcVersion",
 			"type": "pickString",

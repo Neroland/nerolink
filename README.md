@@ -43,7 +43,9 @@ this mod adds no blocks or items.
   supplies progression **gates** and **alerts** directly from Core;
   `energy`/`storage` are well-formed but empty in v1 (Core exposes no cheap
   global index and the bridge never scans loaded chunks — see the config
-  `note`).
+  `note`). `mods` is a server-wide snapshot of the installed Neroland mods
+  (id/name/version) plus the running `loader` and `mcVersion`, so a client can
+  render a mods overview and run update checks.
 - **Actions.** `POST /api/v1/actions/{module}/{action}` re-validates
   server-side (ownership, gates, config, online/offline), deduplicates by
   `requestId` for 10 minutes, and executes on the server thread through the
@@ -87,8 +89,89 @@ Config lives in Core's config system as `nerolink.properties` (reloadable with
 | `actionsDisabled` | *(empty)* | Comma-separated `module/action` ids to block |
 | `snapshotCadenceHotMs` | `5000` | Hot-section cache cadence |
 | `snapshotCadenceColdMs` | `30000` | Cold-section cache cadence |
-| `relayUrl` | *(empty)* | Optional relay endpoint (documented; unused v1) |
+| `relayOrigin` | `https://nerorelay.neroserver.xyz` | Relay used by `/nerolink setup` |
+| `relayUrl` | *(empty)* | **Advanced** manual-override tunnel URL (see below) |
+| `relayKey` | *(empty)* | **Advanced** manual-override server key — **keep secret** |
 | `privacyNoticeText` | *(a notice)* | Text from `GET /privacy/notice` |
+
+## Remote access via the relay (behind NAT)
+
+A home or NAT'd server with no port forwarding can still serve companion
+clients through the **[NeroLink relay](../nerolink-relay)** — a small Cloudflare
+Worker. The bridge dials *out* and holds one WebSocket tunnel to the relay;
+phones connect to the relay; the relay marries the two and forwards traffic
+verbatim. The local HTTP/WS listener and the relay tunnel are independent —
+either, both, or neither may run at once.
+
+**Setup (in-game, recommended):**
+
+1. Point `relayOrigin` at your relay if it isn't the default
+   `https://nerorelay.neroserver.xyz` (deploy your own from
+   [`../nerolink-relay/README.md`](../nerolink-relay), or use a shared one).
+2. An op runs it **once**:
+   ```
+   /nerolink setup
+   ```
+   The bridge registers with the relay off-thread, stores the returned
+   credentials per-world (never in a file you edit by hand), and brings the
+   tunnel up immediately — **no server restart, no curl, no scripts**. The op
+   sees the **Server ID** (bold/gold), the app URL, and a
+   "tunnel connecting — check `/nerolink status`" hint. The `serverKey` is
+   never shown in chat and never logged.
+   - Register against a one-off relay with `/nerolink setup <https-origin>`.
+   - Re-register (discard the stored credentials and get a fresh id) with
+     `/nerolink setup force` (optionally `/nerolink setup force <origin>`).
+     Running plain `/nerolink setup` again when already registered just
+     re-dials the existing tunnel.
+3. Players run `/nerolink pair` — the whisper now shows the **Server ID**
+   prominently. **That id plus the one-time pairing code is all the app needs**
+   (no address to type). The whole API (pairing, discovery, snapshots, actions,
+   live WebSocket deltas) works exactly as on the LAN, just through the relay.
+
+> If the relay has `REGISTRATION_OPEN=false`, `/nerolink setup` reports
+> "registration is closed on this relay" and does nothing until the operator
+> reopens it.
+
+**Advanced / manual override (no in-game setup):** if you'd rather paste
+credentials yourself, register with
+`curl -X POST https://<relay>/register -d '{"serverName":"Neroland SMP"}'`
+(returns `serverId`, a once-shown `serverKey`, a `tunnelUrl` and a `baseUrl`)
+and set **both** `relayUrl` = the `tunnelUrl` and `relayKey` = the `serverKey`
+in `nerolink.properties`. When both are set they **take precedence** over any
+`/nerolink setup` registration and activate on the next server start (`ws://`
+is accepted for a local `wrangler dev` relay). Otherwise leave both blank and
+use `/nerolink setup`.
+
+`/nerolink status` reports the tunnel as `Relay: connected` / `connecting` /
+`disabled` and includes the active **Server ID**. The relay key lives only in
+per-world storage (or config, for the override) and is never logged; the
+bridge logs the relay **host** only. When enabled, the bridge also emits push
+`notify` frames for opted-in notification categories to players who are not
+currently watching live, and an `erase` tombstone (dropping a player's push
+tokens on the relay) whenever a POPIA/GDPR erasure runs.
+
+### Testing the relay from the dev launchers
+
+`tools/setup_dev_relay.py` wires the relay into every `runClient`/`runServer`
+run directory in one step: it registers this dev instance with a relay, keeps
+the credentials in `.dev-relay.json` (gitignored — the key is a secret) and
+writes `relayUrl`/`relayKey` into each run's `config/nerolink.properties`.
+
+```sh
+# terminal 1 — local relay (from ../nerolink-relay); --ip 0.0.0.0 lets your phone reach it
+npx wrangler dev --ip 0.0.0.0
+
+# terminal 2 — register + enable in all dev run configs
+python tools/setup_dev_relay.py                    # local wrangler dev relay
+python tools/setup_dev_relay.py --relay https://nerorelay.neroserver.xyz   # deployed relay
+python tools/setup_dev_relay.py --off              # switch the relay back off
+```
+
+Matching VS Code tasks exist (`Relay: start local relay`, `Relay: register +
+enable in dev runs`, `Relay: disable in dev runs`). Launch any client/server
+run afterwards and `/nerolink status` should report `Relay: connected`; the
+script prints the `https://<relay>/s/<serverId>` address to use in the app
+(with a local relay, substitute your machine's LAN IP for `localhost`).
 
 ## Privacy (POPIA / GDPR)
 

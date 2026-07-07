@@ -1,5 +1,7 @@
 package za.co.neroland.nerolink.coremodule;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -21,6 +23,7 @@ import za.co.neroland.nerolandcore.link.NeroLinkRegistry;
 import za.co.neroland.nerolandcore.progression.CoreGates;
 import za.co.neroland.nerolandcore.progression.ProgressionGates;
 import za.co.neroland.nerolink.NeroLinkBridge;
+import za.co.neroland.nerolink.platform.InstalledMods;
 
 /**
  * The built-in {@code core} module the bridge itself provides, so a Core-only server is fully
@@ -36,6 +39,9 @@ import za.co.neroland.nerolink.NeroLinkBridge;
  *       Core exposes no cheap global index of a player's energy/storage blocks, and the design
  *       forbids scanning all loaded chunks. Documented as a TODO; a future Core index lights
  *       these up without an app change (schema is additive).</li>
+ *   <li>{@code mods} — server-wide snapshot of the installed Neroland mods (id/name/version),
+ *       plus the running {@code loader} and {@code mcVersion}, collected once per loader at init
+ *       (see {@link InstalledMods}). Public metadata, identical for every player.</li>
  * </ul>
  *
  * <p>Action: {@code ack_alert} — acknowledge (and optionally snooze) one of the player's own
@@ -46,7 +52,7 @@ public final class CoreModule implements LinkSnapshotProvider, LinkActionHandler
     public static final String MODULE_ID = "core";
     public static final int SCHEMA_VERSION = 1;
 
-    private static final List<String> SECTIONS = List.of("gates", "alerts", "energy", "storage");
+    private static final List<String> SECTIONS = List.of("gates", "alerts", "energy", "storage", "mods");
     private static final List<String> ACTIONS = List.of("ack_alert");
 
     /** The four Core gates in unlock order, with app-friendly labels. */
@@ -103,6 +109,7 @@ public final class CoreModule implements LinkSnapshotProvider, LinkActionHandler
             case "storage" -> emptyWithNote("storage",
                     "Per-player storage index not available in Core v2; chunk scanning is disallowed. "
                             + "Populated by a future Core storage index (additive schema).");
+            case "mods" -> mods(server);
             default -> {
                 JsonObject obj = new JsonObject();
                 obj.addProperty("section", section);
@@ -152,6 +159,31 @@ public final class CoreModule implements LinkSnapshotProvider, LinkActionHandler
             arr.add(a);
         }
         out.add("alerts", arr);
+        return out;
+    }
+
+    /**
+     * Server-wide snapshot of the installed Neroland mods plus the running loader and MC version,
+     * so the app can render a mods overview and drive update checks. Not player-scoped — a mods
+     * list is public metadata, identical for every player. The list is collected once per loader
+     * at init into {@link InstalledMods}; here it is sorted by id for a stable app ordering.
+     */
+    private JsonObject mods(MinecraftServer server) {
+        JsonObject out = new JsonObject();
+        out.addProperty("asOf", System.currentTimeMillis());
+        out.addProperty("loader", InstalledMods.loader());
+        out.addProperty("mcVersion", server.getServerVersion());
+        List<InstalledMods.Entry> entries = new ArrayList<>(InstalledMods.entries());
+        entries.sort(Comparator.comparing(InstalledMods.Entry::id));
+        JsonArray arr = new JsonArray();
+        for (InstalledMods.Entry e : entries) {
+            JsonObject m = new JsonObject();
+            m.addProperty("id", e.id());
+            m.addProperty("name", e.name());
+            m.addProperty("version", e.version());
+            arr.add(m);
+        }
+        out.add("mods", arr);
         return out;
     }
 

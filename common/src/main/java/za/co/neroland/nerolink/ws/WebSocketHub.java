@@ -191,6 +191,16 @@ public final class WebSocketHub {
         }
     }
 
+    /** Whether the player has at least one live WS client (local or relay-backed). */
+    public boolean isPlayerConnected(UUID player) {
+        for (Subscriber sub : subscribers.values()) {
+            if (sub.connection.player().equals(player)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Close and drop all of a player's sockets (used on erasure). */
     public void disconnectPlayer(UUID player) {
         subscribers.values().removeIf(sub -> {

@@ -56,9 +56,9 @@ jobs:
           jq -Rs '{
             body: .,
             title: "NeroLink",
-            description: "Mine alien ore, power up your machines, build rockets — then terraform a dead world until it rains.",
-            categories: ["technology", "worldgen", "adventure"],
-            client_side: "required",
+            description: "Your Neroland world in your pocket — a server-side bridge that lets companion apps watch drones, energy, quests and stock, and take safe remote actions. Requires only Neroland Core.",
+            categories: ["utility", "management", "social"],
+            client_side: "optional",
             server_side: "required",
             issues_url: "https://github.com/Neroland/nerolink/issues",
             source_url: "https://github.com/Neroland/nerolink",

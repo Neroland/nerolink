@@ -47,6 +47,8 @@ public final class NeroLinkCommon {
                 bridge.pairing().forget(uuid);
                 bridge.wsHub().disconnectPlayer(uuid);
                 bridge.rateLimiter().clear();
+                // POPIA/GDPR: tombstone the player's push tokens on the relay too (no-op if offline).
+                bridge.relay().sendErase(uuid);
             }
         });
     }

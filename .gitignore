@@ -57,3 +57,9 @@ __pycache__/
 
 # node deps (e.g. tools/gradle-mcp markdownlint)
 node_modules/
+
+# Local dev relay credentials (tools/setup_dev_relay.py) - secret, never commit.
+.dev-relay.json
+/neoforge/versions
+/fabric/versions
+/forge/versions

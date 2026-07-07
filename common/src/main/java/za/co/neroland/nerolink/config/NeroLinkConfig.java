@@ -72,9 +72,24 @@ public final class NeroLinkConfig {
             "snapshotCadenceColdMs", 30000, 500, 600000, true,
             "Cache cadence for cold sections (stock, storage).");
 
+    public static final ConfigValue<String> RELAY_ORIGIN = SCHEMA.string(
+            "relayOrigin", "https://nerorelay.neroserver.xyz", true,
+            "Relay base origin used by /nerolink setup to register this server, e.g. "
+                    + "https://nerorelay.neroserver.xyz. /nerolink setup [origin] posts to <origin>/register "
+                    + "and stores the returned credentials per-world; you do not edit relayUrl/relayKey by hand.");
+
     public static final ConfigValue<String> RELAY_URL = SCHEMA.string(
             "relayUrl", "", true,
-            "Optional NeroLink relay endpoint for out-of-LAN access + push. Unused in v1 (documented only).");
+            "MANUAL OVERRIDE (advanced): relay tunnel URL, e.g. "
+                    + "wss://nerorelay.neroserver.xyz/tunnel/<serverId>. Blank = use the /nerolink setup "
+                    + "registration instead. When BOTH relayUrl and relayKey are set they take precedence "
+                    + "over the stored setup registration; otherwise leave both blank and use /nerolink setup.");
+
+    public static final ConfigValue<String> RELAY_KEY = SCHEMA.string(
+            "relayKey", "", true,
+            "MANUAL OVERRIDE (advanced): server key paired with relayUrl - keep secret, never logged. "
+                    + "Blank = use the /nerolink setup registration instead. Set BOTH relayUrl and relayKey "
+                    + "to override the stored setup credentials; otherwise leave blank and use /nerolink setup.");
 
     public static final ConfigValue<String> PRIVACY_NOTICE_TEXT = SCHEMA.string(
             "privacyNoticeText",
@@ -85,12 +100,29 @@ public final class NeroLinkConfig {
             false,
             "Data-processing notice returned by GET /privacy/notice and shown at first pairing.");
 
+    /**
+     * Anonymous crash reporting (Sentry, EU ingest). CLIENT-LOCAL opt-out — deliberately NOT
+     * server-authoritative, so it is never synced and each install decides for itself. Default on;
+     * set false to opt out. Payload is stack trace + mod/MC/loader/OS/Java versions only — never
+     * tokens, pairing codes, relay keys, player identifiers, IPs, or world data (POPIA/GDPR).
+     */
+    public static final ConfigValue<Boolean> TELEMETRY_ENABLED = SCHEMA.bool(
+            "telemetryEnabled", true, false,
+            "Anonymous error reporting to the developers (stack trace + mod/MC/loader/OS/Java "
+                    + "versions only — never tokens, pairing codes, relay keys, names, UUIDs, IPs, or "
+                    + "world data; POPIA/GDPR-compliant, EU servers). Set false to opt out.");
+
     private NeroLinkConfig() {
     }
 
     /** Register the schema with Core. Call once from {@code NeroLinkCommon.init()}. */
     public static void register() {
         ConfigManager.register(SCHEMA);
+    }
+
+    /** Whether anonymous crash reporting is enabled (client-local opt-out; default on). */
+    public static boolean telemetryEnabled() {
+        return TELEMETRY_ENABLED.get();
     }
 
     /** Parsed, lower-cased set of globally disabled {@code module/action} ids. */
