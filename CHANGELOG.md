@@ -4,15 +4,7 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
-### Added
-- **Crash telemetry (opt-out)** — anonymous error reporting via Sentry (EU ingest),
-  matching the rest of the Neroland family. Sends only NeroLink-touching stack traces
-  plus mod/MC/loader/OS/Java versions; never tokens, pairing codes, relay keys,
-  notification preferences, player identifiers, IPs, or world data. Per-session
-  de-dup and a 10-event cap. Opt out with `telemetryEnabled = false` in
-  `config/nerolink.properties` (client-local, not synced). See PRIVACY.md.
-
-## [0.0.1-alpha.1] — 2026-07-07
+## [0.0.1-alpha.2] — 2026-07-07
 
 First alpha of the Neroland companion bridge.
 
@@ -37,3 +29,9 @@ First alpha of the Neroland companion bridge.
   integration (including relay push-token tombstones), no telemetry.
 - Cross-loader: Fabric, Forge, NeoForge on Minecraft 26.1.2 and 26.2. Requires
   Neroland Core 2.0.0+ and nothing else.
+- **Crash telemetry (opt-out)** — anonymous error reporting via Sentry (EU ingest),
+  matching the rest of the Neroland family. Sends only NeroLink-touching stack traces
+  plus mod/MC/loader/OS/Java versions; never tokens, pairing codes, relay keys,
+  notification preferences, player identifiers, IPs, or world data. Per-session
+  de-dup and a 10-event cap. Opt out with `telemetryEnabled = false` in
+  `config/nerolink.properties` (client-local, not synced). See PRIVACY.md.
