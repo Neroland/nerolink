@@ -1,0 +1,70 @@
+name: Sync wiki
+
+# Publishes the in-repo wiki/ folder to this repository's GitHub wiki whenever the
+# sources change. The wiki is a separate git repo (<repo>.wiki.git); this job checks the
+# code out, clones the wiki repo, mirrors wiki/*.md into it, and pushes only if something
+# changed. Plain git — no third-party action needed.
+#
+# ONE-TIME SETUP (required before the first run):
+#   1. The wiki repo does not exist until the wiki has at least one page. Open the repo's
+#      Wiki tab in the GitHub UI and create any page once (e.g. save an empty Home) so
+#      <repo>.wiki.git exists to push to.
+#   2. Settings -> Actions -> General -> Workflow permissions: allow GITHUB_TOKEN write
+#      access (this workflow also requests it via `permissions: contents: write` below).
+on:
+  push:
+    branches: [main]
+    paths:
+      - wiki/**
+      - .github/workflows/wiki.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Push wiki/ to the GitHub wiki
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Mirror wiki/ into the wiki repo and push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -d wiki ] || [ -z "$(ls -A wiki 2>/dev/null)" ]; then
+            echo "::error::wiki/ is missing or empty; nothing to sync."
+            exit 1
+          fi
+
+          WIKI_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+
+          # The wiki repo only exists once the wiki has been initialised in the UI.
+          if ! git clone --depth 1 "$WIKI_URL" wiki_repo; then
+            echo "::error::Could not clone ${GITHUB_REPOSITORY}.wiki.git — initialise the wiki once in the GitHub UI (create any page), then re-run."
+            exit 1
+          fi
+
+          # Mirror the tracked wiki pages into the wiki repo (drop stale pages, keep .git).
+          find wiki_repo -maxdepth 1 -type f -name '*.md' -delete
+          cp wiki/*.md wiki_repo/
+
+          cd wiki_repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date; nothing to push."
+            exit 0
+          fi
+
+          git commit -m "Sync wiki from ${GITHUB_SHA}"
+          git push origin HEAD
+          echo "Wiki synced."
