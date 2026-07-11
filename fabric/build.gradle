@@ -69,6 +69,9 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
         mod_license          : rootProject.mod_license,
         fabric_loader_version: rootProject.fabric_loader_version,
         minecraft_version    : mc,
+        // Floor the required Core version at what we compile against so the loader refuses to
+        // run against a Core too old to have the APIs it references.
+        nerolandcore_version : nerolandcoreVersion,
     ]
     inputs.properties(props)
     expand(props)

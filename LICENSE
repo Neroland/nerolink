@@ -1,18 +1,18 @@
-Nerospace License
+NeroLink License
 =================
 
 Copyright (c) 2026 Dario Maselli ("Neroland"). All Rights Reserved.
 
-"Nerospace" (the "Mod") means this Minecraft modification, including its
+"NeroLink" (the "Mod") means this Minecraft modification, including its
 source code, compiled builds (jars), textures, models, sounds, names, and
 all other original assets in this repository.
 
 "Official Sources" means the distribution channels operated or authorised
 by the copyright holder, currently:
 
-- CurseForge:      <https://www.curseforge.com/minecraft/mc-mods/nerospace>
-- Modrinth:        <https://modrinth.com/mod/nerospace>
-- GitHub releases: <https://github.com/Neroland/nerospace/releases>
+- CurseForge:      <https://www.curseforge.com/minecraft/mc-mods/nerolink>
+- Modrinth:        <https://modrinth.com/mod/nerolink>
+- GitHub releases: <https://github.com/Neroland/nerolink/releases>
 
 The Mod is source-available, not open source: you can read and learn from
 everything here, but the rights granted below are the only rights granted.
@@ -32,9 +32,9 @@ b) MODPACKS — allowed and encouraged. You may include the Mod in any
        download — e.g. CurseForge/Modrinth pack manifests — satisfy this
        automatically);
      - you do not present the Mod as your own work; and
-     - the pack's listing credits "Nerospace by Neroland" with links to
+     - the pack's listing credits "NeroLink by Neroland" with links to
        the CurseForge page above and the GitHub repository
-       (<https://github.com/Neroland/nerospace>).
+       (<https://github.com/Neroland/nerolink>).
 
 c) CONTENT CREATION & COMMERCIAL USE. Create and monetise videos, streams,
    screenshots, reviews, and other content featuring the Mod, and run the
@@ -52,7 +52,7 @@ e) CONTRIBUTIONS. Submit issues and pull requests. By submitting a
    royalty-free licence to use, modify, distribute, and relicense that
    contribution as part of the Mod.
 
-1. WHAT YOU MAY NOT DO (without prior written permission)
+2. WHAT YOU MAY NOT DO (without prior written permission)
 
 -----------------------------------------
 
@@ -69,10 +69,10 @@ c) MISREPRESENTATION. Do not claim authorship of the Mod or imply
    endorsement by the copyright holder.
 
 Permission requests: open an issue at
-<https://github.com/Neroland/nerospace/issues> or email <info@neroland.co.za>.
+<https://github.com/Neroland/nerolink/issues> or email <info@neroland.co.za>.
 Permission is granted only when given explicitly and in writing.
 
-1. NO WARRANTY
+3. NO WARRANTY
 
 -----------------------------------------
 
@@ -83,7 +83,7 @@ THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
 WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
 OR IN CONNECTION WITH THE MOD OR THE USE OF OR OTHER DEALINGS IN THE MOD.
 
-1. NOTES
+4. NOTES
 
 -----------------------------------------
 

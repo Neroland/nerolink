@@ -22,6 +22,6 @@
     "minecraft": ">=${minecraft_version}",
     "java": ">=21",
     "fabric-api": "*",
-    "nerolandcore": ">=2.0.0"
+    "nerolandcore": ">=${nerolandcore_version}"
   }
 }

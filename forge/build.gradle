@@ -95,6 +95,10 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
         mod_license               : rootProject.mod_license,
         forge_loader_version_range: "[${forgeMajor},)",
         minecraft_version_range   : "[${mc},)",
+        // Floor the required Core version at what we compile against so Forge refuses to
+        // load against a Core too old to have the APIs it references, instead of crashing
+        // at registration.
+        nerolandcore_version_range: "[${nerolandcoreVersion},2.0)",
     ]
     inputs.properties(props)
     expand(props)
