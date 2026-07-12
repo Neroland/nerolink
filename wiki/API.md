@@ -88,6 +88,9 @@ All paths are relative to `/api/v1`. **A** = requires auth.
 | `POST` | `/privacy/erase` | ✓ | Fire Core's shared erasure for your data across all mods. |
 | `GET` | `/prefs/notifications` | ✓ | Your notification category flags. |
 | `PUT` | `/prefs/notifications` | ✓ | Replace your notification category flags. |
+| `GET` | `/wiki` | ✓ | Aggregate in-app wiki index across every module that ships one. |
+| `GET` | `/wiki/{module}` | ✓ | One module's wiki index (page list). |
+| `GET` | `/wiki/{module}/{slug}` | ✓ | One wiki page's raw markdown. |
 | `GET` | `/{module}/{section}` | ✓ | A module snapshot (player-scoped). |
 | `POST` | `/actions/{module}/{action}` | ✓ | Invoke a safe, server-validated action. |
 
@@ -107,7 +110,7 @@ supports:
   "server": { "id": "1a2b3c", "name": "Neroland SMP", "online": true, "players": 3 },
   "modules": [
     { "id": "core", "version": "2.0.0", "schema": 1,
-      "data": ["gates", "alerts", "energy", "storage", "mods"], "actions": ["ack_alert"] },
+      "data": ["gates", "alerts", "energy", "storage", "mods", "wiki"], "actions": ["ack_alert"] },
     { "id": "nerospace", "version": null, "schema": 0, "data": [], "actions": [], "absent": true }
   ]
 } }
@@ -180,6 +183,13 @@ mods overview and drive update checks:
 
 The list is collected once per loader at init and sorted by `id` for stable ordering.
 
+### `wiki`
+
+NeroLink's own wiki (these pages), served under the built-in `core` module with the title
+"NeroLink". Follows the [WIKI CONTRACT v1](#wiki-contract-v1-for-mod-authors): no `page`
+param returns the index, `page=<slug>` returns the raw markdown. Prefer the dedicated
+[`/wiki` routes](#in-app-wiki) — they aggregate this alongside every other mod's wiki.
+
 ## Actions
 
 `POST /api/v1/actions/{module}/{action}` invokes a safe action. The bridge re-validates
@@ -220,6 +230,80 @@ Success:
 Other mods register their own actions via Core's link registry; the framework (config
 gates, ownership/gate re-validation, idempotency, offline handling, error mapping) is the
 same for all of them.
+
+## In-app wiki
+
+The bridge exposes an **in-app, per-mod wiki** so a companion client can browse each
+installed mod's documentation while playing. It is **fully mod-agnostic**: any module that
+advertises a `wiki` data section (see [discovery](#discovery)) is automatically browsable —
+no bridge change per mod. NeroLink's own wiki (these pages) and Core's are served by the
+built-in `core` module under the title **"NeroLink"**.
+
+Wiki content is **public** (no personal data), but the routes still run inside the same
+authenticated, rate-limited pipeline as every other read.
+
+### Routes
+
+- `GET /api/v1/wiki` — the aggregate index across **every** present module that exposes a
+  `wiki` section. `core` and `nerolink` are pinned first (when present), then the rest by
+  id. Modules that error or return nothing are skipped:
+  ```json
+  { "ok": true, "data": {
+    "mods": [
+      { "mod": "core", "title": "NeroLink",
+        "pages": [ { "slug": "Home", "title": "NeroLink Wiki" }, { "slug": "API", "title": "API" } ] },
+      { "mod": "nerologistics", "title": "NeroLogistics",
+        "pages": [ { "slug": "Home", "title": "Home" } ] }
+    ],
+    "asOf": 1751880000000
+  } }
+  ```
+- `GET /api/v1/wiki/{module}` — one module's index (page list). `404 MODULE_ABSENT` if the
+  module isn't present **or** doesn't expose a `wiki` section:
+  ```json
+  { "ok": true, "data": {
+    "mod": "core", "title": "NeroLink",
+    "pages": [ { "slug": "Home", "title": "NeroLink Wiki" }, … ],
+    "asOf": 1751880000000
+  } }
+  ```
+- `GET /api/v1/wiki/{module}/{slug}` — one page's raw markdown. `404 NOT_FOUND` for an
+  unknown slug; `404 MODULE_ABSENT` if the module has no wiki:
+  ```json
+  { "ok": true, "data": {
+    "mod": "core", "slug": "Home", "title": "NeroLink Wiki",
+    "format": "markdown", "content": "# NeroLink Wiki\n\n…",
+    "asOf": 1751880000000
+  } }
+  ```
+
+The client renders `content` as markdown. Page lists and content are safe to cache; `asOf`
+lets a client bust its cache.
+
+### WIKI CONTRACT v1 (for mod authors)
+
+A mod opts a wiki into the app with **no NeroLink dependency** — it only depends on Core's
+link registry. Two steps:
+
+1. Include `"wiki"` in the module's `LinkModuleInfo.dataSections`.
+2. Answer `LinkSnapshotProvider.snapshot(player, "wiki", params)` (the `player` is ignored —
+   the content is public):
+   - **No `page` param → INDEX:**
+     ```json
+     { "mod": "<id>", "title": "<Name>",
+       "pages": [ { "slug": "Home", "title": "Home" }, … ], "asOf": <millis> }
+     ```
+   - **`page=<slug>` → PAGE:**
+     ```json
+     { "mod": "<id>", "slug": "<slug>", "title": "<title>", "format": "markdown",
+       "content": "<raw markdown>", "asOf": <millis> }
+     ```
+   - **Unknown slug →** an object carrying `"error": "unknown page"` (the bridge maps this to
+     `404 NOT_FOUND`).
+
+The bridge reuses a small `WikiPages` helper for its own built-in wiki (loads a generated
+`index.json` + bundled markdown from the classpath); mods are free to source their pages
+however they like as long as they answer in this shape.
 
 ## WebSocket protocol
 

@@ -120,6 +120,16 @@ public final class ApiDispatcher {
             if (method.equals("POST") && seg.size() == 3 && seg.get(0).equals("actions")) {
                 return handleAction(player, seg.get(1), seg.get(2), req.body());
             }
+            // Wiki (in-app per-mod wiki browsing). MUST precede the generic 2-segment snapshot
+            // route below so GET /wiki/{module} isn't swallowed as a {module}/{section} snapshot.
+            if (method.equals("GET") && !seg.isEmpty() && seg.get(0).equals("wiki")) {
+                return switch (seg.size()) {
+                    case 1 -> onServerThread(() -> WikiRoutes.aggregateIndex(player));
+                    case 2 -> onServerThread(() -> WikiRoutes.moduleIndex(player, seg.get(1)));
+                    case 3 -> onServerThread(() -> WikiRoutes.modulePage(player, seg.get(1), seg.get(2)));
+                    default -> completed(ApiResponse.notFound("no such wiki route"));
+                };
+            }
             // Module snapshot: GET /{moduleId}/{section}
             if (method.equals("GET") && seg.size() == 2) {
                 return handleSnapshot(player, seg.get(0), seg.get(1), req.query());

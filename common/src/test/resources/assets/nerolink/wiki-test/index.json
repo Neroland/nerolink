@@ -1,0 +1,6 @@
+{
+  "pages": [
+    { "slug": "Home", "title": "Home" },
+    { "slug": "Getting-Started", "title": "Getting Started" }
+  ]
+}

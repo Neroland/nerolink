@@ -21,6 +21,11 @@ Companion clients are the official Neroland companion app (coming soon) and anyt
 that speaks the NeroLink API. NeroLink itself ships no HTTP server behaviour beyond this
 bridge.
 
+The bridge also serves an **in-app wiki**: the app can browse each installed mod's
+documentation (and NeroLink's and Core's own) while you play. It is mod-agnostic — any mod
+that exposes a `wiki` data section through Core's link registry is automatically browsable.
+See the [API](API.md#in-app-wiki) for the routes and the WIKI CONTRACT.
+
 ## Contents
 
 - [Getting Started](Getting-Started.md) — install, LAN/direct quickstart on port

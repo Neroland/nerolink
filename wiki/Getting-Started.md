@@ -72,6 +72,13 @@ LAN address. **That Server ID plus the one-time pairing code is all the app need
 address to type. Pairing, discovery, snapshots, actions and live deltas all work exactly
 as they do on the LAN, just through the relay.
 
+## Browsing the in-app wiki
+
+Once paired, the app can browse each installed mod's wiki without leaving the game — a
+handy reference while you build. NeroLink's own pages and Core's are always available; any
+other Nero mod that ships a wiki shows up automatically the moment it's installed on the
+server. See the [API](API.md#in-app-wiki) if you're building a client.
+
 ## Managing your devices
 
 - `/nerolink devices` — list the devices you've paired (names + ids, never tokens).

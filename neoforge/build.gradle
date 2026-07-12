@@ -31,6 +31,25 @@ repositories {
 sourceSets.main.java.srcDir rootProject.ext.commonJava
 sourceSets.main.resources.srcDir rootProject.ext.commonResources
 
+// Plain-JVM unit tests (JUnit 5, no game bootstrap). The shared tests live in
+// common/src/test/java (mirroring NeroTech's layout) but — since `common` is not a Gradle
+// project (see settings.gradle) — they are WIRED here, in the neoforge nodes only:
+// ModDevGradle cleanly exposes the modding classpath to extra source sets via
+// addModdingDependenciesTo (below), which Loom/ForgeGradle have no equivalent for.
+// Run with `gradlew :neoforge:<mc>:test`; `build`/`check` runs them automatically.
+sourceSets.test.java.srcDir "${rootProject.projectDir}/common/src/test/java"
+sourceSets.test.resources.srcDir "${rootProject.projectDir}/common/src/test/resources"
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.12.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+}
+
 dependencies {
     // Neroland Core — required shared foundation; NeroLink builds its bridge against Core's link API.
     // Compile + dev-runtime classpath; NOT jar-in-jar — Core ships as its own mod. Resolved from
@@ -79,6 +98,11 @@ sourceSets.main.resources.srcDir generateModMetadata
 neoForge {
     version = neoVersion
     ideSyncTask generateModMetadata
+
+    // Give the unit-test source set the same (de-obfuscated) Minecraft + NeoForge classpath as
+    // main, so tests can reference game/Core types without a running server. testImplementation
+    // already extends implementation, which carries Core. Mirrors NeroTech's test wiring.
+    addModdingDependenciesTo sourceSets.test
 
     def at = rootProject.file('common/src/main/resources/META-INF/accesstransformer.cfg')
     if (at.exists()) {

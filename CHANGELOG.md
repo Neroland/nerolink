@@ -4,6 +4,16 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+### Added
+- **In-app per-mod wiki** — new authed reads `GET /api/v1/wiki`, `GET /api/v1/wiki/{module}`
+  and `GET /api/v1/wiki/{module}/{slug}` let the companion app browse each installed mod's
+  documentation while playing. Fully mod-agnostic: any module that advertises a `wiki` data
+  section through Core's link registry is automatically browsable (WIKI CONTRACT v1). The
+  bridge serves its own wiki (and Core's) under the built-in `core` module, bundling
+  `wiki/*.md` into resources at build time with a generated `index.json`. All content is
+  public; the routes stay inside the existing authed + rate-limited pipeline. See
+  [API](wiki/API.md#in-app-wiki).
+
 ## [0.0.1-alpha.2] — 2026-07-07
 
 First alpha of the Neroland companion bridge.
