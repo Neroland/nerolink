@@ -222,12 +222,10 @@ jobs:
       # One CurseForge/Modrinth version per cell, each tagged with its EXACT loader +
       # game-version (so no jar is mislabelled). Each version carries its own copy of the
       # changelog (self-contained per the chosen layout).
-      - name: Publish to CurseForge and Modrinth
+      - name: Publish to Modrinth
         id: upload
         uses: Kir-Antipov/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659 # v3.3
         with:
-          curseforge-id: ${{ secrets.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSE_FORGE_API_TOKEN }}
           modrinth-id: ${{ secrets.MODRINTH_PROJECT_ID }}
           modrinth-token: ${{ secrets.MODRINTH_API_TOKEN }}
           name: NeroLink ${{ needs.detect.outputs.version }} - ${{ matrix.label }} ${{ matrix.mc }}
@@ -271,6 +269,59 @@ jobs:
             exit 1
           fi
           echo "Modrinth version ${VERSION_ID}: environment set to client_and_server (HTTP 204)."
+
+      # CurseForge requires every Minecraft Java file to declare its environment
+      # (Client / Server) from 2026-07-15 - enforced by the upload API. mc-publish
+      # cannot set this field, so this jar is uploaded to CurseForge directly here,
+      # with gameVersionNames carrying the Minecraft version, the loader AND both
+      # environments. NeroLink runs on BOTH sides (mirrors the Modrinth
+      # client_and_server pin above), so Client + Server are both tagged.
+      # Privacy (POPIA/GDPR): only version strings, loader/MC names and the curated
+      # changelog are sent or logged - no personal data.
+      - name: Upload to CurseForge (with environment)
+        env:
+          CF_API_TOKEN: ${{ secrets.CURSE_FORGE_API_TOKEN }}
+          CF_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+          DISPLAY_NAME: NeroLink ${{ needs.detect.outputs.version }} - ${{ matrix.label }} ${{ matrix.mc }}
+          RELEASE_TYPE: ${{ needs.build.outputs.version_type }}
+          MC_VERSION: ${{ matrix.mc }}
+          CF_LOADER: ${{ matrix.label }}
+          JAR: dist/nerolink-${{ matrix.loader }}-${{ matrix.mc }}-${{ needs.detect.outputs.version }}${{ matrix.suffix }}.jar
+        run: |
+          if [ ! -f "$JAR" ]; then
+            echo "::error::Jar not found for CurseForge upload: $JAR"
+            exit 1
+          fi
+
+          # gameVersionNames carries the Minecraft version, the loader and BOTH
+          # environments (Client + Server) - the environment tags are what CurseForge
+          # now requires. --rawfile embeds the changelog verbatim (safe JSON encoding).
+          jq -n \
+            --rawfile changelog dist/RELEASE_NOTES.md \
+            --arg name "$DISPLAY_NAME" \
+            --arg rt "$RELEASE_TYPE" \
+            --arg mc "$MC_VERSION" \
+            --arg loader "$CF_LOADER" \
+            '{
+              changelog: $changelog,
+              changelogType: "markdown",
+              displayName: $name,
+              releaseType: $rt,
+              gameVersionNames: [$mc, $loader, "Client", "Server"]
+            }' > cf_metadata.json
+
+          HTTP_CODE=$(curl -sS -o cf_response.json -w "%{http_code}" \
+            -X POST "https://minecraft.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file" \
+            -H "X-Api-Token: ${CF_API_TOKEN}" \
+            -F "metadata=<cf_metadata.json" \
+            -F "file=@${JAR}")
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::CurseForge upload returned HTTP $HTTP_CODE"
+            cat cf_response.json
+            exit 1
+          fi
+          echo "CurseForge upload OK (HTTP 200): file id $(jq -r '.id' cf_response.json) - $MC_VERSION / $CF_LOADER / Client+Server"
 
   release:
     name: GitHub Release + Sentry
