@@ -202,8 +202,11 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      # Gentle on the CurseForge/Modrinth APIs vs. firing all six uploads at once.
-      max-parallel: 2
+      # STRICTLY one upload at a time. At max-parallel 2 the CurseForge upload endpoint
+      # returned generic HTTP 500s for concurrent uploads to the same project. Serial
+      # uploads + the retry loop in the CurseForge step below make the matrix
+      # deterministic.
+      max-parallel: 1
       matrix:
         include:
           - { loader: fabric,   mc: "26.1.2", label: "Fabric",   suffix: "" }
@@ -310,17 +313,35 @@ jobs:
               gameVersionNames: [$mc, $loader, "Client", "Server"]
             }' > cf_metadata.json
 
-          HTTP_CODE=$(curl -sS -o cf_response.json -w "%{http_code}" \
-            -X POST "https://minecraft.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file" \
-            -H "X-Api-Token: ${CF_API_TOKEN}" \
-            -F "metadata=<cf_metadata.json" \
-            -F "file=@${JAR}")
+          # CurseForge's upload endpoint intermittently answers a generic HTTP 500
+          # ("An unhandled exception occurred") under load — retry 5xx with backoff.
+          # 4xx responses are real request errors and fail immediately (no retry), so a
+          # bad token/metadata never spams the API.
+          ATTEMPTS=4
+          for i in $(seq 1 $ATTEMPTS); do
+            HTTP_CODE=$(curl -sS -o cf_response.json -w "%{http_code}" \
+              -X POST "https://minecraft.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file" \
+              -H "X-Api-Token: ${CF_API_TOKEN}" \
+              -F "metadata=<cf_metadata.json" \
+              -F "file=@${JAR}")
 
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::CurseForge upload returned HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              break
+            fi
+            if [ "$HTTP_CODE" -lt 500 ]; then
+              echo "::error::CurseForge upload returned HTTP $HTTP_CODE (not retryable)"
+              cat cf_response.json
+              exit 1
+            fi
+            if [ "$i" = "$ATTEMPTS" ]; then
+              echo "::error::CurseForge upload returned HTTP $HTTP_CODE after $ATTEMPTS attempts"
+              cat cf_response.json
+              exit 1
+            fi
+            echo "CurseForge upload attempt $i/$ATTEMPTS returned HTTP $HTTP_CODE - retrying in 30s..."
             cat cf_response.json
-            exit 1
-          fi
+            sleep 30
+          done
           echo "CurseForge upload OK (HTTP 200): file id $(jq -r '.id' cf_response.json) - $MC_VERSION / $CF_LOADER / Client+Server"
 
   release:

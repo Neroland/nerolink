@@ -1,9 +1,9 @@
 # API
 
 This page is for **client and tool developers**. Everything here is drawn from the bridge
-implementation; where the umbrella API spec and the code disagree, **the code is
-authoritative**. The current API revision is **`1`** and the bridge version is
-`0.0.1-alpha.1`.
+implementation, which is **authoritative** wherever any other API description disagrees with
+it. The current API revision is **`1`** and the bridge version is
+`0.0.1-alpha.2`.
 
 Every authenticated response is scoped to the token's player — a paired device sees and
 acts on **its own player's data only**. Game state is only ever touched on the server
@@ -19,6 +19,15 @@ All routes live under a versioned prefix. There are two ways to reach them:
   `wss://<relay>/s/<serverId>/ws/v1`. The relay forwards frames **verbatim**, so the API
   is byte-for-byte identical; only the base URL differs. Here `<serverId>` is the relay's
   short Server ID (case-insensitive) from `/nerolink setup`. See [Relay](Relay.md).
+
+> **Security note.** The direct/LAN path has **no TLS** — it is plain HTTP and
+> WebSocket, so `Authorization: Bearer <token>` headers and all player-scoped
+> data travel in **cleartext**. Bind the bridge to a LAN interface or
+> `127.0.0.1` (`bindAddress`) and never port-forward the port to the internet.
+> The **relay path is the encrypted option**: TLS terminates at Cloudflare and
+> the bridge dials out over `wss://`. The bridge also accepts `ws://`/`http://`
+> relay URLs, but that is only for a local `wrangler dev` relay — never for a
+> remote one.
 
 > **Relay transport note.** Over the relay, REST calls are multiplexed on one tunnel with
 > request ids and WebSocket frames pass straight through (wire protocol in the

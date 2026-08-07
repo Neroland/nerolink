@@ -36,9 +36,10 @@ First alpha of the Neroland companion bridge.
 - **Notifications plumbing** — per-player, per-category opt-in preferences; push
   `notify` frames to the relay for players who are offline/not watching.
 - **POPIA/GDPR** — own-data-only responses, hashed tokens, `PlayerDataErasure`
-  integration (including relay push-token tombstones), no telemetry.
+  integration (including relay push-token tombstones); the only telemetry is
+  opt-out crash reporting that carries no personal data (see below).
 - Cross-loader: Fabric, Forge, NeoForge on Minecraft 26.1.2 and 26.2. Requires
-  Neroland Core 2.0.0+ and nothing else.
+  Neroland Core 1.4.0 or later and nothing else.
 - **Crash telemetry (opt-out)** — anonymous error reporting via Sentry (EU ingest),
   matching the rest of the Neroland family. Sends only NeroLink-touching stack traces
   plus mod/MC/loader/OS/Java versions; never tokens, pairing codes, relay keys,

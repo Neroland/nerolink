@@ -7,8 +7,9 @@ relay, from anywhere.
 
 ## Install
 
-1. Install **Neroland Core `2.0.0+`** — NeroLink hard-depends on it and will not load
-   without it. Core loads first.
+1. Install **Neroland Core `1.4.0` or later** (the release that introduced the link API;
+   accepted range `[1.4.0,2.0)`) — NeroLink hard-depends on it and will not load without
+   it. Core loads first.
 2. Drop the NeroLink jar for your loader and Minecraft version into the server's `mods`
    folder. NeroLink ships for **Fabric, Forge and NeoForge** on **Minecraft 26.1.2 and
    26.2**.
