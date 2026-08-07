@@ -133,6 +133,55 @@ subprojects {
             }
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Bundle NeroLink's OWN wiki into each loader jar for the in-app wiki feature.
+    // Single source of truth: the repo-root wiki/*.md (also the published GitHub wiki).
+    // This copies those pages into processed resources at assets/nerolink/wiki/ and writes
+    // a generated index.json (slug + title list) alongside them, because classpath directory
+    // listing is unreliable across loaders/jars. CoreModule reads them via WikiPages and serves
+    // them under the built-in `core` module's `wiki` section. Wired into resources exactly like
+    // generateModMetadata, so processResources -> the jar picks it up. Node-only (no branch
+    // containers / root), matching the eclipse block above.
+    if (isNode) {
+        def wikiSrcDir = rootProject.file('wiki')
+        def generateWikiResources = tasks.register('generateWikiResources', Copy) {
+            group = 'nerolink'
+            description = "Bundle NeroLink's own wiki (wiki/*.md) + a generated index.json into resources."
+            from(wikiSrcDir) {
+                include '*.md'
+                into 'assets/nerolink/wiki'
+            }
+            into layout.buildDirectory.dir('generated/sources/wiki')
+            // The `from` spec above already tracks the wiki/*.md set as task inputs, so the copy
+            // (and the index.json regenerated in doLast) re-runs whenever a page changes.
+            doLast {
+                def outDir = layout.buildDirectory.dir('generated/sources/wiki/assets/nerolink/wiki').get().asFile
+                outDir.mkdirs()
+                def pages = []
+                def mdFiles = wikiSrcDir.listFiles({ f -> f.isFile() && f.name.endsWith('.md') } as FileFilter)
+                if (mdFiles != null) {
+                    mdFiles.sort { it.name }.each { f ->
+                        def slug = f.name.substring(0, f.name.length() - 3)
+                        // Title = first '# ' heading if present, else the slug with hyphens as spaces.
+                        def title = slug.replace('-', ' ')
+                        f.withReader('UTF-8') { r ->
+                            String line
+                            while ((line = r.readLine()) != null) {
+                                def t = line.trim()
+                                if (t.startsWith('# ')) { title = t.substring(2).trim(); return }
+                                if (!t.isEmpty()) { return }
+                            }
+                        }
+                        pages << [slug: slug, title: title]
+                    }
+                }
+                def json = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([pages: pages]))
+                new File(outDir, 'index.json').write(json, 'UTF-8')
+            }
+        }
+        sourceSets.main.resources.srcDir generateWikiResources
+    }
 }
 
 // ---------------------------------------------------------------------------

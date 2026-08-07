@@ -24,6 +24,7 @@ import za.co.neroland.nerolandcore.progression.CoreGates;
 import za.co.neroland.nerolandcore.progression.ProgressionGates;
 import za.co.neroland.nerolink.NeroLinkBridge;
 import za.co.neroland.nerolink.platform.InstalledMods;
+import za.co.neroland.nerolink.wiki.WikiPages;
 
 /**
  * The built-in {@code core} module the bridge itself provides, so a Core-only server is fully
@@ -42,6 +43,11 @@ import za.co.neroland.nerolink.platform.InstalledMods;
  *   <li>{@code mods} — server-wide snapshot of the installed Neroland mods (id/name/version),
  *       plus the running {@code loader} and {@code mcVersion}, collected once per loader at init
  *       (see {@link InstalledMods}). Public metadata, identical for every player.</li>
+ *   <li>{@code wiki} — NeroLink's own (and, by extension, Core's) in-app wiki, per the WIKI
+ *       CONTRACT v1. Design choice: rather than invent a separate {@code nerolink} module entry,
+ *       the bridge serves its bundled wiki pages under this built-in {@code core} module with the
+ *       title "NeroLink". Content is public markdown bundled from the repo's {@code wiki/} folder
+ *       (see {@link WikiPages}); the player id is ignored.</li>
  * </ul>
  *
  * <p>Action: {@code ack_alert} — acknowledge (and optionally snooze) one of the player's own
@@ -52,8 +58,17 @@ public final class CoreModule implements LinkSnapshotProvider, LinkActionHandler
     public static final String MODULE_ID = "core";
     public static final int SCHEMA_VERSION = 1;
 
-    private static final List<String> SECTIONS = List.of("gates", "alerts", "energy", "storage", "mods");
+    private static final List<String> SECTIONS = List.of("gates", "alerts", "energy", "storage", "mods", "wiki");
     private static final List<String> ACTIONS = List.of("ack_alert");
+
+    /**
+     * NeroLink's own bundled wiki, served under this {@code core} module (title "NeroLink"). The
+     * markdown lives in the repo's {@code wiki/} folder and is copied into {@code assets/nerolink/wiki/}
+     * at build time ({@code generateWikiResources}), alongside a generated {@code index.json}. Loaded
+     * once at class-init; all pages are public (no personal data).
+     */
+    private static final String WIKI_TITLE = "NeroLink";
+    private static final WikiPages WIKI = new WikiPages("/assets/nerolink/wiki/");
 
     /** The four Core gates in unlock order, with app-friendly labels. */
     private static final List<Identifier> GATES = List.of(
@@ -99,17 +114,20 @@ public final class CoreModule implements LinkSnapshotProvider, LinkActionHandler
 
     @Override
     public JsonObject snapshot(UUID playerId, String section, Map<String, String> params) {
-        MinecraftServer server = server();
+        // The 'wiki' section is public bundled content and needs no server handle, so resolve the
+        // server lazily (per-case) rather than eagerly — this keeps wiki serving decoupled from a
+        // running bridge/server.
         return switch (section) {
-            case "gates" -> gates(server, playerId);
-            case "alerts" -> alerts(server, playerId);
+            case "gates" -> gates(server(), playerId);
+            case "alerts" -> alerts(server(), playerId);
             case "energy" -> emptyWithNote("energy",
                     "Per-player energy index not available in Core v2; chunk scanning is disallowed. "
                             + "Populated by a future Core storage index (additive schema).");
             case "storage" -> emptyWithNote("storage",
                     "Per-player storage index not available in Core v2; chunk scanning is disallowed. "
                             + "Populated by a future Core storage index (additive schema).");
-            case "mods" -> mods(server);
+            case "mods" -> mods(server());
+            case "wiki" -> WIKI.snapshot(MODULE_ID, WIKI_TITLE, params);
             default -> {
                 JsonObject obj = new JsonObject();
                 obj.addProperty("section", section);

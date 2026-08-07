@@ -1,6 +1,6 @@
 # NeroLink
 
-> Part of the [Neroland](../neroland-mc-ecosystem) sci-fi Minecraft mod
+> Part of the Neroland sci-fi Minecraft mod
 > ecosystem, built on **Neroland Core**.
 
 **NeroLink is a server-side bridge mod.** It embeds a small HTTP + WebSocket
@@ -10,12 +10,13 @@ server-validated actions. It is *a window, not a controller*: it never edits
 the world, never moves the player, and does nothing a player couldn't do
 standing at the relevant block in-game.
 
-Only **Neroland Core 2.0.0+** is required. Every other Nero mod is a
+Only **Neroland Core 1.4.0 or later** (the release that introduced the link
+API) is required. Every other Nero mod is a
 progressive enhancement, discovered at connect time — a Core-only server is
 already useful (progression gates, alerts, server status). Companion clients
 speak the NeroLink API described in the ecosystem docs.
 
-**Status:** `0.0.1-alpha.1` — v1 bridge implemented (pairing, discovery,
+**Status:** `0.0.1-alpha.2` — v1 bridge implemented (pairing, discovery,
 snapshots, actions, WebSocket deltas, privacy endpoints). No gameplay content;
 this mod adds no blocks or items.
 
@@ -25,7 +26,7 @@ this mod adds no blocks or items.
 - **Loaders:** NeoForge, MinecraftForge/Forge, Fabric (the "6 cells")
 - **Java:** 25
 - Mod id: `nerolink` · package `za.co.neroland.nerolink`
-- **Requires:** Neroland Core `[2.0, 3.0)` (loads before NeroLink)
+- **Requires:** Neroland Core `[1.4.0,2.0)` (loads before NeroLink)
 
 ## What the bridge does
 
@@ -93,6 +94,21 @@ Config lives in Core's config system as `nerolink.properties` (reloadable with
 | `relayUrl` | *(empty)* | **Advanced** manual-override tunnel URL (see below) |
 | `relayKey` | *(empty)* | **Advanced** manual-override server key — **keep secret** |
 | `privacyNoticeText` | *(a notice)* | Text from `GET /privacy/notice` |
+
+### Security note (read before exposing the port)
+
+The direct LAN listener is **plain HTTP/WebSocket with no TLS**. Bearer device
+tokens and player-scoped data cross the network **in cleartext**, so anyone who
+can see the traffic can read them and replay a token.
+
+- The default `bindAddress` is `0.0.0.0` — **all** interfaces. Restrict it to a
+  single LAN interface, or `127.0.0.1`, unless you understand the exposure.
+  **Never port-forward the bridge port to the public internet.**
+- The **relay is the encrypted option**: Cloudflare terminates TLS and the
+  bridge dials out over `wss://`, so nothing travels in the clear.
+- `RelayClient` also accepts `ws://` / `http://` relay URLs. That is a
+  deliberate downgrade path for a local `wrangler dev` relay only — never point
+  it at a remote relay.
 
 ## Remote access via the relay (behind NAT)
 
@@ -220,12 +236,11 @@ Stonecutter:
           :fabric:26.1.2:build :fabric:26.2:build   # all six
 ```
 
-Core 2.0.0 is resolved from `mavenLocal()` (run `./gradlew publishToMavenLocal`
+Core 1.4.0+ is resolved from `mavenLocal()` (run `./gradlew publishToMavenLocal`
 in `../neroland-core`) or from GitHub Packages on CI. See
 [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) for contributor context.
 
 ## Docs
 
-Design, API and dependency docs for this mod live in the umbrella repo under
-[`../neroland-mc-ecosystem/nerolink`](../neroland-mc-ecosystem/nerolink),
-including the full **API specification** the companion clients target.
+The full **API specification** the companion clients target lives in
+[`wiki/API.md`](wiki/API.md).

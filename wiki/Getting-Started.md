@@ -7,8 +7,9 @@ relay, from anywhere.
 
 ## Install
 
-1. Install **Neroland Core `2.0.0+`** — NeroLink hard-depends on it and will not load
-   without it. Core loads first.
+1. Install **Neroland Core `1.4.0` or later** (the release that introduced the link API;
+   accepted range `[1.4.0,2.0)`) — NeroLink hard-depends on it and will not load without
+   it. Core loads first.
 2. Drop the NeroLink jar for your loader and Minecraft version into the server's `mods`
    folder. NeroLink ships for **Fabric, Forge and NeoForge** on **Minecraft 26.1.2 and
    26.2**.
@@ -71,6 +72,13 @@ When a relay is active, `/nerolink pair` shows the **Server ID** prominently, ab
 LAN address. **That Server ID plus the one-time pairing code is all the app needs** — no
 address to type. Pairing, discovery, snapshots, actions and live deltas all work exactly
 as they do on the LAN, just through the relay.
+
+## Browsing the in-app wiki
+
+Once paired, the app can browse each installed mod's wiki without leaving the game — a
+handy reference while you build. NeroLink's own pages and Core's are always available; any
+other Nero mod that ships a wiki shows up automatically the moment it's installed on the
+server. See the [API](API.md#in-app-wiki) if you're building a client.
 
 ## Managing your devices
 
