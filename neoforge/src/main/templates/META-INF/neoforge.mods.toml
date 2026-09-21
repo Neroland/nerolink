@@ -1,7 +1,7 @@
 modLoader = "javafml"
 loaderVersion = "[1,)"
 license = "${mod_license}"
-logoFile = "nerolink_logo.png"
+${mod_logo_entry}
 
 [[mods]]
 modId = "${mod_id}"

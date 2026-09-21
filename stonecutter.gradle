@@ -66,6 +66,98 @@ subprojects {
     // Java extension would reject the nested node ("not a valid java project"). Keeping
     // branch parents as plain folders lets VS Code import each node as a standalone project.
     def isNode = project.parent != null && project.parent.parent != null
+
+    // Stonecutter only preprocesses a node's own src/ tree; the shared common/ source above is spliced
+    // in raw, so it could never carry `//? if >=26.3 {` blocks. Route it through Stonecutter's public
+    // process() API for every NON-active node (output under build/generated/stonecutter-common/java).
+    // The active node keeps the raw folder, so the IDE still edits the real files. Keep common/ in the
+    // vcsVersion state, exactly like the loader src/ trees.
+    if (isNode) {
+        afterEvaluate { node ->
+            def sc = node.extensions.findByName('stonecutter')
+            if (sc == null || sc.current.active) {
+                return
+            }
+            def raw = new File(rootProject.ext.commonJava).canonicalFile
+            def outRel = 'build/generated/stonecutter-common/java'
+            def outDir = node.file(outRel)
+            def processCommon = node.tasks.register('stonecutterProcessCommon') {
+                group = 'stonecutter'
+                description = 'Preprocesses the shared common/ Java source for this Minecraft version.'
+                inputs.dir(raw)
+                inputs.property('mc', sc.current.version)
+                outputs.dir(outDir)
+                doLast {
+                    node.delete(outDir)
+                    raw.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+                        def rel = raw.toPath().relativize(f.toPath()).toString().replace('\\', '/')
+                        if (f.name.endsWith('.java') && f.getText('UTF-8').contains('//?')) {
+                            sc.process(f, "${outRel}/${rel}")
+                        } else {
+                            def dst = new File(outDir, rel)
+                            dst.parentFile.mkdirs()
+                            dst.bytes = f.bytes
+                        }
+                    }
+                }
+            }
+            // Re-setting srcDirs resolves every entry to a plain File, which would drop Stonecutter's own
+            // task dependency on its generated sources, so re-attach it to the untouched entries.
+            def scGenerate = node.tasks.findByName('stonecutterGenerate')
+            def javaSrc = node.sourceSets.main.java
+            javaSrc.srcDirs = javaSrc.srcDirs.collect {
+                if (it.canonicalFile == raw) {
+                    return node.files(outDir).builtBy(processCommon)
+                }
+                return scGenerate != null ? node.files(it).builtBy(scGenerate) : it
+            }
+        }
+    }
+
+    // Version-specific resource overlays: common/src/main/resources-<mc> is merged OVER the shared
+    // common/src/main/resources for every node whose Minecraft version is >= <mc> (later overlays win).
+    // Needed where a datapack file's format differs between versions (e.g. 26.3's worldgen/feature).
+    if (isNode) {
+        afterEvaluate { node ->
+            def sc = node.extensions.findByName('stonecutter')
+            if (sc == null) {
+                return
+            }
+            def base = new File(rootProject.ext.commonResources).canonicalFile
+            def verOf = { File d -> d.name.substring('resources-'.length()) }
+            def overlays = (base.parentFile.listFiles() ?: [] as File[]).findAll {
+                it.isDirectory() && it.name.startsWith('resources-') && sc.eval(sc.current.version, ">=" + verOf(it))
+            }.sort { a, b ->
+                def x = verOf(a).tokenize('.')*.toInteger(), y = verOf(b).tokenize('.')*.toInteger()
+                def n = [x.size(), y.size()].max()
+                for (int i = 0; i < n; i++) {
+                    int c = (i < x.size() ? x[i] : 0) <=> (i < y.size() ? y[i] : 0)
+                    if (c != 0) return c
+                }
+                return 0
+            }
+            if (overlays.isEmpty()) {
+                return
+            }
+            def outDir = node.file('build/generated/stonecutter-common/resources')
+            def mergeResources = node.tasks.register('mergeCommonResources', Sync) {
+                group = 'stonecutter'
+                description = 'Merges the version-specific common/src/main/resources-<mc> overlays.'
+                duplicatesStrategy = DuplicatesStrategy.INCLUDE // later sources (the overlays) win
+                from(base)
+                overlays.each { from(it) }
+                into(outDir)
+            }
+            def scGenerate = node.tasks.findByName('stonecutterGenerate')
+            def res = node.sourceSets.main.resources
+            res.srcDirs = res.srcDirs.collect {
+                if (it.canonicalFile == base) {
+                    return node.files(outDir).builtBy(mergeResources)
+                }
+                return scGenerate != null ? node.files(it).builtBy(scGenerate) : it
+            }
+        }
+    }
     if (isNode) {
         // Compute the unique name HERE (project = the Gradle project); inside
         // `eclipse.project {}` `project` rebinds to the Eclipse model, which has no `parent`.

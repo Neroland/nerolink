@@ -9,11 +9,11 @@ pluginManagement {
     // Plugin versions are declared here so each module applies them by id only.
     plugins {
         id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
-        id 'net.neoforged.moddev' version '2.0.141'      // common (NeoForm) + neoforge
+        id 'net.neoforged.moddev' version '2.0.147'      // common (NeoForm) + neoforge
         id 'net.fabricmc.fabric-loom' version '1.17.12' // fabric — 1.17 handles de-obf 26.x (omit mappings)
-        id 'net.minecraftforge.gradle' version '7.0.30'  // forge — FG 7 handles de-obf 26.x
+        id 'net.minecraftforge.gradle' version '7.0.40'  // forge — FG 7 handles de-obf 26.x
         id 'net.minecraftforge.jarjar' version '0.2.3'   // forge Jar-in-Jar dependencies
-        id 'dev.kikugie.stonecutter' version '0.9.6'     // version axis (per-MC nodes)
+        id 'dev.kikugie.stonecutter' version '0.9.8'     // version axis (per-MC nodes)
     }
 }
 
@@ -29,9 +29,9 @@ rootProject.name = 'nerolink'
 // the flat include 'common'/'fabric'/'neoforge').
 //
 //   branch  -> loader   (fabric, neoforge, forge) : its own dir + build.gradle
-//   version -> MC build (26.1.2, 26.2)       : a real subproject per cell
+//   version -> MC build (26.1.2, 26.2, 26.3)       : a real subproject per cell
 //
-// Produces the six cells as DISTINCT Gradle projects, each with its own
+// Produces the nine cells as DISTINCT Gradle projects, each with its own
 // resolved classpath:
 //   :fabric:26.1.2   :fabric:26.2
 //   :neoforge:26.1.2 :neoforge:26.2
@@ -46,9 +46,9 @@ rootProject.name = 'nerolink'
 // ---------------------------------------------------------------------------
 stonecutter {
     create(rootProject) {
-        branch('fabric')   { versions('26.1.2', '26.2') }
-        branch('neoforge') { versions('26.1.2', '26.2') }
-        branch('forge')    { versions('26.1.2', '26.2') }
+        branch('fabric')   { versions('26.1.2', '26.2', '26.3') }
+        branch('neoforge') { versions('26.1.2', '26.2', '26.3') }
+        branch('forge')    { versions('26.1.2', '26.2', '26.3') }
         vcsVersion = '26.2'   // reset point for commits / default checkout
     }
 }

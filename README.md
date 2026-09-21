@@ -22,8 +22,8 @@ this mod adds no blocks or items.
 
 ## Build targets
 
-- **Minecraft:** 26.1.2 and 26.2
-- **Loaders:** NeoForge, MinecraftForge/Forge, Fabric (the "6 cells")
+- **Minecraft:** 26.1.2, 26.2 and 26.3
+- **Loaders:** NeoForge, MinecraftForge/Forge, Fabric (the "9 cells")
 - **Java:** 25
 - Mod id: `nerolink` · package `za.co.neroland.nerolink`
 - **Requires:** Neroland Core `[1.4.0,2.0)` (loads before NeroLink)
@@ -231,9 +231,9 @@ Stonecutter:
 
 ```sh
 ./gradlew :fabric:26.2:build          # one cell
-./gradlew :neoforge:26.1.2:build :neoforge:26.2:build \
-          :forge:26.1.2:build :forge:26.2:build \
-          :fabric:26.1.2:build :fabric:26.2:build   # all six
+./gradlew :neoforge:26.1.2:build :neoforge:26.2:build :neoforge:26.3:build \
+          :forge:26.1.2:build :forge:26.2:build :forge:26.3:build \
+          :fabric:26.1.2:build :fabric:26.2:build :fabric:26.3:build   # all nine
 ```
 
 Core 1.4.0+ is resolved from `mavenLocal()` (run `./gradlew publishToMavenLocal`

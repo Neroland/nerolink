@@ -4,13 +4,16 @@ name: Multiloader Build
 # (ModDevGradle common+neoforge, Fabric Loom fabric, ForgeGradle forge; no architectury-loom).
 #
 # STRICT: there is no continue-on-error, so ANY matrix cell that fails to build
-# fails the whole workflow. All six loader x version cells are verified buildable
+# fails the whole workflow. All nine loader x version cells are verified buildable
 # from public artifacts:
 #   - neoforge @ 26.1.2  -> NeoForge 26.1.2.76
 #   - neoforge @ 26.2    -> NeoForge 26.2.0.6-beta (now on the public NeoForged Maven)
+#   - neoforge @ 26.3    -> NeoForge 26.3.0.7-beta
 #   - forge    @ 26.1.2  -> Forge 26.1.2-64.0.10
 #   - forge    @ 26.2    -> Forge 26.2-65.0.0
+#   - forge    @ 26.3    -> Forge 26.3-66.0.2
 #   - fabric   @ 26.2    -> Fabric Loom 1.17 + fabric-api 0.152.1+26.2 (de-obf, no mappings)
+#   - fabric   @ 26.3    -> Fabric Loom 1.17 + fabric-api 0.161.0+26.3 (de-obf, no mappings)
 #   - fabric   @ 26.1.2  -> Fabric Loom 1.17 + fabric-api 0.151.0+26.1.2; needs the access
 #                          widener (fabric/src/main/resources/nerolink.accesswidener) because
 #                          vanilla MC 26.1.2 kept BlockEntityType's constructor private
@@ -50,14 +53,20 @@ jobs:
             mc: "26.1.2"
           - loader: neoforge
             mc: "26.2"
+          - loader: neoforge
+            mc: "26.3"
           - loader: forge
             mc: "26.1.2"
           - loader: forge
             mc: "26.2"
+          - loader: forge
+            mc: "26.3"
           - loader: fabric
             mc: "26.1.2"
           - loader: fabric
             mc: "26.2"
+          - loader: fabric
+            mc: "26.3"
 
     steps:
       - name: Checkout repository

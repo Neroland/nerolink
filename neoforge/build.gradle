@@ -76,12 +76,21 @@ dependencies {
 // neoForge.ideSyncTask runs this on IDE sync so bin/main gets the EXPANDED manifest
 // and Run & Debug works — values stay dynamic (from gradle.properties).
 def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    // NeoForge 26.2 deprecated the `logoFile` property in favour of `bannerFile` (wide banner) and
+    // `iconFile` (square icon); 26.2+ shows a dev-only warning screen for any mod still using it, while
+    // 26.1.2's FML only understands `logoFile`. Our logo is a square 256x256 PNG, so emit `iconFile` on
+    // 26.2+ and keep `logoFile` on 26.1.2 — one template, correct metadata on every cell, no warning.
+    def mcParts = mc.tokenize('.').collect { it.toInteger() }
+    def squareIconKey = mcParts[0] > 26 || (mcParts[0] == 26 && (mcParts.size() < 2 || mcParts[1] >= 2))
+    def modLogoEntry = (squareIconKey ? 'iconFile' : 'logoFile') + ' = "nerolink_logo.png"'
+
     def props = [
         mod_id                 : rootProject.mod_id,
         mod_version            : rootProject.mod_version,
         mod_name               : rootProject.mod_name,
         mod_authors            : rootProject.mod_authors,
         mod_license            : rootProject.mod_license,
+        mod_logo_entry         : modLogoEntry,
         minecraft_version_range: "[${mc},)",
         // Floor the required Core version at what we compile against so Forge refuses to
         // load against a Core too old to have the APIs it references, instead of crashing

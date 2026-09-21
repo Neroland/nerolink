@@ -10,7 +10,7 @@
 - Mod id: **`nerolink`** (matches the registry namespace + every loader manifest). Package root:
   `za.co.neroland.nerolink`. Author: **Neroland**.
 - Version: **0.0.1-alpha.1**.
-- Targets **MC 26.1.2 AND 26.2** on **NeoForge, MinecraftForge/Forge, and Fabric** → the **"6 cells"**.
+- Targets **MC 26.1.2, 26.2 AND 26.3** on **NeoForge, MinecraftForge/Forge, and Fabric** → the **"9 cells"**.
   **Java 25.** Mappings = official Mojang names (26.x ships de-obfuscated; no Parchment).
 
 ## Working rules
@@ -30,15 +30,16 @@
   `stonecutter.gradle` (the REAL root build script — Stonecutter repoints `buildFileName` here; the root
   `build.gradle` is inert), `gradle.properties`, `gradlew`, `gradle/`.
 - **Version/loader axis = Stonecutter.** Each loader×MC is a real node `:<loader>:<mc>`
-  (`:fabric:26.1.2 :fabric:26.2 :neoforge:26.1.2 :neoforge:26.2 :forge:26.1.2 :forge:26.2`). `common` is
+  (`:fabric:26.1.2 :fabric:26.2 :fabric:26.3 :neoforge:26.1.2 :neoforge:26.2 :neoforge:26.3 :forge:26.1.2 :forge:26.2 :forge:26.3`). `common` is
   NOT a node — its source is spliced via `rootProject.ext.commonJava` / `commonResources`. Dependency pins
-  live in `gradle.properties` as `*_version_<mc>` keys; `mc_versions=26.1.2,26.2`.
+  live in `gradle.properties` as `*_version_<mc>` keys; `mc_versions=26.1.2,26.2,26.3`.
+- **Version-specific code in `common/`.** Non-active nodes run `common/` through Stonecutter (`stonecutterProcessCommon`), so shared code uses the same `//? if >=26.3 {` blocks as the loader `src/` trees. Keep the files in the vcsVersion state, and never put a `*/` inside a disabled block. Datapack files whose format differs by version go in `common/src/main/resources-<mc>/`, which is merged over `common/src/main/resources` for every node at or above `<mc>` (`mergeCommonResources`).
 
 ## Build & verify
 
-- Build the cells with the Gradle wrapper, e.g. `./gradlew :fabric:26.2:build` or all six:
-  `:neoforge:26.1.2:build :neoforge:26.2:build :forge:26.1.2:build :forge:26.2:build
-  :fabric:26.1.2:build :fabric:26.2:build`.
+- Build the cells with the Gradle wrapper, e.g. `./gradlew :fabric:26.2:build` or all nine:
+  `:neoforge:26.1.2:build :neoforge:26.2:build :neoforge:26.3:build :forge:26.1.2:build :forge:26.2:build :forge:26.3:build
+  :fabric:26.1.2:build :fabric:26.2:build :fabric:26.3:build`.
 - Static analysis: `./gradlew :fabric:26.2:ecjCheck` (the VS Code Problems panel, via `tools/ecj.prefs`).
   The task only FAILS on errors.
 - A Cowork agent sandbox cannot decompile Minecraft — run builds natively (or via the local gradle MCP)

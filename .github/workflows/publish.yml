@@ -1,13 +1,13 @@
 name: Publish
 
-# Builds and publishes the MULTILOADER mod (all 6 cells: fabric/neoforge/forge x 26.1.2/26.2)
+# Builds and publishes the MULTILOADER mod (all 9 cells: fabric/neoforge/forge x 26.1.2/26.2/26.3)
 # whenever the mod_version in gradle.properties has no published release yet.
 #
 # Pipeline (4 jobs):
 #   detect  -> is there a v<mod_version> release tag yet? (read-only ledger check)
 #   build   -> build all 6 cells once; extract release notes; upload the 6 distributable
 #              jars + notes as the `dist` artifact.
-#   publish -> matrix over the 6 cells: download `dist`, upload each jar to CurseForge +
+#   publish -> matrix over the 9 cells: download `dist`, upload each jar to CurseForge +
 #              Modrinth as its own version tagged with the EXACT loader + game-version (each
 #              version self-contained, carrying its own copy of the changelog).
 #   release -> runs LAST (needs: publish): download `dist`, register the Sentry release, then
@@ -121,9 +121,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           ./gradlew
-          :fabric:26.1.2:build :fabric:26.2:build
-          :neoforge:26.1.2:build :neoforge:26.2:build
-          :forge:26.1.2:build :forge:26.2:build
+          :fabric:26.1.2:build :fabric:26.2:build :fabric:26.3:build
+          :neoforge:26.1.2:build :neoforge:26.2:build :neoforge:26.3:build
+          :forge:26.1.2:build :forge:26.2:build :forge:26.3:build
           --stacktrace
 
       # Release channel from the version suffix: -alpha -> alpha, -beta -> beta, else release.
@@ -178,10 +178,13 @@ jobs:
           mkdir -p dist
           cp "fabric/versions/26.1.2/build/libs/nerolink-fabric-26.1.2-$VERSION.jar"     dist/
           cp "fabric/versions/26.2/build/libs/nerolink-fabric-26.2-$VERSION.jar"         dist/
+          cp "fabric/versions/26.3/build/libs/nerolink-fabric-26.3-$VERSION.jar"         dist/
           cp "neoforge/versions/26.1.2/build/libs/nerolink-neoforge-26.1.2-$VERSION.jar" dist/
           cp "neoforge/versions/26.2/build/libs/nerolink-neoforge-26.2-$VERSION.jar"     dist/
+          cp "neoforge/versions/26.3/build/libs/nerolink-neoforge-26.3-$VERSION.jar"     dist/
           cp "forge/versions/26.1.2/build/libs/nerolink-forge-26.1.2-$VERSION-all.jar"   dist/
           cp "forge/versions/26.2/build/libs/nerolink-forge-26.2-$VERSION-all.jar"       dist/
+          cp "forge/versions/26.3/build/libs/nerolink-forge-26.3-$VERSION-all.jar"       dist/
           cp RELEASE_NOTES.md dist/
           ls -l dist/
 
@@ -211,10 +214,13 @@ jobs:
         include:
           - { loader: fabric,   mc: "26.1.2", label: "Fabric",   suffix: "" }
           - { loader: fabric,   mc: "26.2",   label: "Fabric",   suffix: "" }
+          - { loader: fabric,   mc: "26.3",   label: "Fabric",   suffix: "" }
           - { loader: neoforge, mc: "26.1.2", label: "NeoForge", suffix: "" }
           - { loader: neoforge, mc: "26.2",   label: "NeoForge", suffix: "" }
+          - { loader: neoforge, mc: "26.3",   label: "NeoForge", suffix: "" }
           - { loader: forge,    mc: "26.1.2", label: "Forge",    suffix: "-all" }
           - { loader: forge,    mc: "26.2",   label: "Forge",    suffix: "-all" }
+          - { loader: forge,    mc: "26.3",   label: "Forge",    suffix: "-all" }
     steps:
       - name: Download distributables
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

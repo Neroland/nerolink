@@ -1,5 +1,5 @@
 {
-  "//": "Debug for the FLATTENED cross-loader build (Stonecutter nodes :fabric/:neoforge/:forge x 26.1.2/26.2). Pick a \u0027Debug: \u003ccell\u003e\u0027 config and press F5 — its preLaunchTask runs that cell\u0027s client suspended on :5005, and VS Code attaches once the JVM is listening. To RUN without a debugger, use the \u0027ML: Run ...\u0027 entries in tasks.json. Project names come from \u0027./gradlew eclipse\u0027 (re-run after dependency changes, then reload).",
+  "//": "Debug for the FLATTENED cross-loader build (Stonecutter nodes :fabric/:neoforge/:forge x 26.1.2/26.2/26.3). Pick a \u0027Debug: \u003ccell\u003e\u0027 config and press F5 — its preLaunchTask runs that cell\u0027s client suspended on :5005, and VS Code attaches once the JVM is listening. To RUN without a debugger, use the \u0027ML: Run ...\u0027 entries in tasks.json. Project names come from \u0027./gradlew eclipse\u0027 (re-run after dependency changes, then reload).",
   "version": "0.2.0",
   "configurations": [
     {
@@ -31,6 +31,19 @@
     {
       "type": "java",
       "request": "attach",
+      "name": "Debug: NeoForge 26.3",
+      "projectName": "nerolink-neoforge-26.3",
+      "hostName": "localhost",
+      "port": 5005,
+      "preLaunchTask": "ML: Debug NeoForge Client - 26.3",
+      "presentation": {
+        "group": "NeroLink",
+        "order": 2
+      }
+    },
+    {
+      "type": "java",
+      "request": "attach",
       "name": "Debug: Forge 26.1.2",
       "projectName": "nerolink-forge-26.1.2",
       "hostName": "localhost",
@@ -38,7 +51,7 @@
       "preLaunchTask": "ML: Debug Forge Client - 26.1.2",
       "presentation": {
         "group": "NeroLink",
-        "order": 2
+        "order": 3
       }
     },
     {
@@ -51,7 +64,20 @@
       "preLaunchTask": "ML: Debug Forge Client - 26.2",
       "presentation": {
         "group": "NeroLink",
-        "order": 3
+        "order": 4
+      }
+    },
+    {
+      "type": "java",
+      "request": "attach",
+      "name": "Debug: Forge 26.3",
+      "projectName": "nerolink-forge-26.3",
+      "hostName": "localhost",
+      "port": 5005,
+      "preLaunchTask": "ML: Debug Forge Client - 26.3",
+      "presentation": {
+        "group": "NeroLink",
+        "order": 5
       }
     },
     {
@@ -64,7 +90,7 @@
       "preLaunchTask": "ML: Debug Fabric Client - 26.1.2",
       "presentation": {
         "group": "NeroLink",
-        "order": 4
+        "order": 6
       }
     },
     {
@@ -77,7 +103,20 @@
       "preLaunchTask": "ML: Debug Fabric Client - 26.2",
       "presentation": {
         "group": "NeroLink",
-        "order": 5
+        "order": 7
+      }
+    },
+    {
+      "type": "java",
+      "request": "attach",
+      "name": "Debug: Fabric 26.3",
+      "projectName": "nerolink-fabric-26.3",
+      "hostName": "localhost",
+      "port": 5005,
+      "preLaunchTask": "ML: Debug Fabric Client - 26.3",
+      "presentation": {
+        "group": "NeroLink",
+        "order": 8
       }
     }
   ]
