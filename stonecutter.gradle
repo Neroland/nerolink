@@ -139,22 +139,25 @@ subprojects {
             if (overlays.isEmpty()) {
                 return
             }
+            // Stage ONLY the overlays, and ADD that directory as an extra resource srcDir — never
+            // rebuild sourceSets.main.resources.srcDirs. Reading srcDirs resolves every entry to a
+            // plain File and discards the task that produces it; re-adding them with a blanket
+            // builtBy(stonecutterGenerate) silently replaced generateModMetadata as the producer of
+            // the generated manifest, so processResources stopped running it and the jar shipped
+            // with no fabric.mod.json / mods.toml. Incremental builds hid it (a manifest from an
+            // earlier run was still on disk); clean builds failed.
             def outDir = node.file('build/generated/stonecutter-common/resources')
             def mergeResources = node.tasks.register('mergeCommonResources', Sync) {
                 group = 'stonecutter'
-                description = 'Merges the version-specific common/src/main/resources-<mc> overlays.'
-                duplicatesStrategy = DuplicatesStrategy.INCLUDE // later sources (the overlays) win
-                from(base)
+                description = 'Stages the version-specific common/src/main/resources-<mc> overlays.'
+                duplicatesStrategy = DuplicatesStrategy.INCLUDE // later overlays win over earlier ones
                 overlays.each { from(it) }
                 into(outDir)
             }
-            def scGenerate = node.tasks.findByName('stonecutterGenerate')
-            def res = node.sourceSets.main.resources
-            res.srcDirs = res.srcDirs.collect {
-                if (it.canonicalFile == base) {
-                    return node.files(outDir).builtBy(mergeResources)
-                }
-                return scGenerate != null ? node.files(it).builtBy(scGenerate) : it
+            // Appended last, so on a duplicate path the overlay wins over the shared common resources.
+            node.sourceSets.main.resources.srcDir(node.files(outDir).builtBy(mergeResources))
+            node.tasks.named('processResources') {
+                duplicatesStrategy = DuplicatesStrategy.INCLUDE
             }
         }
     }
