@@ -10,6 +10,7 @@ plugins {
 def mc = stonecutter.current.version
 def fabricApi = project.findProperty("fabric_api_version_${mc}")
 def jeiVersion = project.findProperty("jei_version_${mc}")
+def emiFile = project.findProperty("emi_file_fabric_${mc}")
 def nerolandcoreVersion = project.findProperty('nerolandcore_version')
 
 // This node's projectDir is <loader>/versions/<v>; the authoritative loader source +
@@ -52,6 +53,16 @@ dependencies {
         compileOnly "mezz.jei:jei-${mc}-common-api:${jeiVersion}"
         compileOnly "mezz.jei:jei-${mc}-fabric-api:${jeiVersion}"
         runtimeOnly "mezz.jei:jei-${mc}-fabric:${jeiVersion}"
+    }
+
+    // EMI (optional recipe-viewer compat). EMI ships one jar per loader with its API inside, so compile
+    // against the whole jar; it is never published as a dependency. The dev client loads it only with
+    // -PwithEmi, so default runs keep the plain JEI setup.
+    if (emiFile) {
+        compileOnly "curse.maven:emi-unofficial-port-unstable-1544558:${emiFile}"
+        if (project.hasProperty('withEmi')) {
+            runtimeOnly "curse.maven:emi-unofficial-port-unstable-1544558:${emiFile}"
+        }
     }
 }
 

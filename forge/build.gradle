@@ -11,6 +11,7 @@ plugins {
 def mc = stonecutter.current.version
 def forgeVersion = project.findProperty("forge_version_${mc}")
 def jeiVersion = project.findProperty("jei_version_${mc}")
+def emiFile = project.findProperty("emi_file_neoforge_${mc}")
 def nerolandcoreVersion = project.findProperty('nerolandcore_version')
 
 if (!forgeVersion) {
@@ -82,6 +83,13 @@ dependencies {
     // JEI common API only; Forge 26.x loader artifacts are not yet published on the pinned JEI lines.
     if (jeiVersion) {
         compileOnly "mezz.jei:jei-${mc}-common-api:${jeiVersion}"
+    }
+
+    // EMI: compile-only, so any shared compat/emi plugin compiles in the Forge cells. The port publishes no
+    // Forge build, so this borrows the NeoForge jar for its loader-agnostic dev.emi.emi.api classes; nothing
+    // EMI-related is loaded on Forge.
+    if (emiFile) {
+        compileOnly "curse.maven:emi-unofficial-port-unstable-1544558:${emiFile}"
     }
 }
 
