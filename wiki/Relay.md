@@ -15,7 +15,12 @@ marries the two and forwards traffic **verbatim**:
 - REST calls are multiplexed over the single tunnel with request ids.
 - WebSocket topic frames pass straight through.
 - The API surface is **identical** to talking to the bridge directly — clients just use a
-  different base URL (see [API](API.md)).
+  different base URL (see [API](API.md)). The one difference is pairing: over the relay the
+  app sends the plain pairing code (protected by TLS to the relay's public certificate),
+  while direct mode uses a certificate-bound `codeProof`.
+
+The relay is **not end-to-end encrypted**: phone→relay and relay→bridge are both TLS, but
+the relay terminates TLS and reads traffic in memory to forward it. It never stores it.
 
 Because the connection is outbound, no inbound firewall rule or port forward is needed. If
 the tunnel drops, the bridge reconnects automatically with backoff.
@@ -57,7 +62,7 @@ type this ID plus their one-time pairing code into the app — that's all a rela
 needs, with **no address to type**. Server IDs are matched **case-insensitively**, so
 players don't have to worry about capitalisation.
 
-`/nerolink pair` shows the active Server ID prominently (above the LAN address), and
+`/nerolink pair` shows the active Server ID prominently (above the direct address), and
 `/nerolink status` reports it alongside the relay state.
 
 > The relay's Server ID (used in the app URL `https://<relay>/s/<serverId>`) is distinct
@@ -85,7 +90,9 @@ The relay is a small, open-source **Cloudflare Worker + Durable Object**, publis
 - Your relay lives at `https://nerolink-relay.<subdomain>.workers.dev`; attach a custom
   domain whenever you like.
 - Optional push notifications ride Firebase Cloud Messaging (iOS via FCM/APNs); disabled by
-  default and the relay works fine without them.
+  default and the relay works fine without them. From NeroLink 1.0 the relay asks the
+  bridge (`GET /api/v1/session`) which player and device a push registration belongs to,
+  rather than trusting the phone.
 
 See the `nerolink-relay` repository's README for full launch instructions and a smoke-test
 script that proves the whole path without Minecraft.
@@ -97,7 +104,16 @@ key) and, when push is enabled, **device push tokens** keyed by `(playerUuid, de
 REST bodies, WebSocket frames and bearer tokens are forwarded **verbatim, never persisted,
 never logged**. When a player triggers erasure in-game, the bridge sends an `erase`
 tombstone over the tunnel that drops that player's push tokens on the relay too — so one
-erasure request purges everything, everywhere. See [Privacy](Privacy.md).
+erasure request purges everything, everywhere. Revoking or expiring one device sends a
+`push_unbind` frame that drops just that device's push token. If the tunnel is down, both
+are queued in the world's relay settings (up to 4096) and delivered on reconnect. Pairing
+requests over the relay carry a salted, daily-rotating hash of the client IP (never the IP
+itself) so the bridge can rate-limit failed codes per source. See [Privacy](Privacy.md).
+
+Relay retention (relay 0.3.0 and later): push registrations not refreshed for 60 days are
+deleted, and a server registration whose bridge hasn't connected for 90 days is deleted
+with all its data. An operator can also deregister a server at any time with the server
+key (`DELETE /tunnel/<serverId>`); see the relay's README.
 
 ## See also
 

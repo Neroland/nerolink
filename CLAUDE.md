@@ -5,11 +5,13 @@
 ## The mod
 
 - **NeroLink** — part of the Neroland sci-fi Minecraft mod ecosystem, built on **Neroland Core**.
-  This repository is currently a **barebones multiloader skeleton** (no gameplay content yet); add
-  shared content under `common/` and wire it through each loader entry point.
+  A server-side companion bridge (HTTP/WebSocket API + relay tunnel) with no gameplay content; the
+  whole bridge lives under `common/`, and each loader entry point only wires init, commands and lifecycle.
 - Mod id: **`nerolink`** (matches the registry namespace + every loader manifest). Package root:
   `za.co.neroland.nerolink`. Author: **Neroland**.
-- Version: **0.0.1-alpha.1**.
+- Version: the current version is `mod_version` in `gradle.properties` (the developer bumps it).
+  `publish.yml` publishes whenever that version has no release yet, so pushing a new `mod_version` to
+  `main` publishes.
 - Targets **MC 26.1.2, 26.2 AND 26.3** on **NeoForge, MinecraftForge/Forge, and Fabric** → the **"9 cells"**.
   **Java 25.** Mappings = official Mojang names (26.x ships de-obfuscated; no Parchment).
 

@@ -83,14 +83,16 @@ public final class CoreModule implements LinkSnapshotProvider, LinkActionHandler
     }
 
     /**
-     * Core version reported in this module's discovery entry. The bridge requires Core 2.0+
-     * (see the loader manifests); this is a display string, not a resolution constraint.
+     * The installed Neroland Core version as the loader reports it (display only; the resolution
+     * constraint lives in the loader manifests: Core 1.13.0 or newer, below 2.0).
      */
-    public static final String CORE_VERSION = "2.0.0";
+    public static String coreVersion() {
+        return za.co.neroland.nerolink.NeroLinkCommon.installedVersion("nerolandcore").orElse("unknown");
+    }
 
     /** Register the core module (snapshot + action) with the link registry. */
     public static void register() {
-        LinkModuleInfo info = new LinkModuleInfo(MODULE_ID, CORE_VERSION, SCHEMA_VERSION, SECTIONS, ACTIONS);
+        LinkModuleInfo info = new LinkModuleInfo(MODULE_ID, coreVersion(), SCHEMA_VERSION, SECTIONS, ACTIONS);
         NeroLinkRegistry.registerSnapshotProvider(INSTANCE, info);
         NeroLinkRegistry.registerActionHandler(INSTANCE, info);
     }

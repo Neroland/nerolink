@@ -21,15 +21,24 @@ Nothing is broadcast or logged. The whisper contains:
 - **Pairing code** — format `XXXX-XXXX`, bold/gold. **Valid for 5 minutes, single-use.**
 - **Server ID** — shown only when a relay registration is active; this is what players
   enter in the app alongside the code.
-- **Bridge address** — `host:port` for LAN/direct mode (the first site-local IPv4 and the
-  configured `port`), tagged `(LAN/direct mode — NOT the 'open to LAN' game port)`.
+- **Direct address** — `host:port` for direct mode (the first site-local IPv4 and the
+  configured `port`), tagged `(same network - NOT the 'open to LAN' game port)`. Shown only
+  when direct mode is reachable from the network (not when bound to `127.0.0.1`).
+- **Security code** — the first 16 hex digits of the bridge's TLS certificate fingerprint,
+  as `XXXX-XXXX-XXXX-XXXX`, shown with the direct address. The app shows the same code;
+  check they match before trusting the pairing.
+
+If neither a relay nor a reachable direct listener is available, the whisper explains how
+to fix it (`/nerolink setup`, or `singleplayerLanAccess=true` in single-player).
 
 Only a player can run this (it needs an in-game identity); running it from console fails
 with *"Only a player can pair a device."* If the bridge isn't running you'll see *"The
 NeroLink bridge is not running on this server."*
 
 The in-game session *is* the identity proof — there are no passwords or emails. A client
-redeems the code once via the API to receive its device token.
+redeems the code once via the API to receive its device token. Repeated wrong codes are
+rate-limited per source (and server-wide during a flood); your code stays valid for its
+5 minutes, so just try again a moment later.
 
 ## `/nerolink devices`
 
@@ -42,7 +51,9 @@ to the calling player's own devices only.
 
 Revokes one of **your own** devices by its id (`<device>` is the device id from
 `/nerolink devices`). The bridge deletes the stored token hash and forgets the device's
-rate-limit bucket, so that device can no longer authenticate. If the id isn't one of yours
+rate-limit bucket, so that device can no longer authenticate. Its live connection is
+closed immediately and, if a relay is set up, its push registration is removed (queued
+until the tunnel reconnects if it is down). If the id isn't one of yours
 it fails with *"No such device of yours: &lt;id&gt;"* — you can never revoke another
 player's device.
 

@@ -10,15 +10,16 @@ server-validated actions. It is *a window, not a controller*: it never edits
 the world, never moves the player, and does nothing a player couldn't do
 standing at the relevant block in-game.
 
-Only **Neroland Core 1.4.0 or later** (the release that introduced the link
-API) is required. Every other Nero mod is a
+Only **Neroland Core 1.13.0 or newer (below 2.0)** is required. Every other Nero mod is a
 progressive enhancement, discovered at connect time — a Core-only server is
 already useful (progression gates, alerts, server status). Companion clients
 speak the NeroLink API described in the ecosystem docs.
 
-**Status:** `0.0.1-alpha.2` — v1 bridge implemented (pairing, discovery,
-snapshots, actions, WebSocket deltas, privacy endpoints). No gameplay content;
-this mod adds no blocks or items.
+**Status:** heading for **1.0.0**, the first production release (the current
+version is `mod_version` in `gradle.properties`; changes are listed in
+[`CHANGELOG.md`](CHANGELOG.md)). The v1 bridge is implemented: TLS pairing,
+discovery, snapshots, actions, WebSocket deltas, privacy endpoints and the relay
+tunnel. No gameplay content; this mod adds no blocks or items.
 
 ## Build targets
 
@@ -26,15 +27,18 @@ this mod adds no blocks or items.
 - **Loaders:** NeoForge, MinecraftForge/Forge, Fabric (the "9 cells")
 - **Java:** 25
 - Mod id: `nerolink` · package `za.co.neroland.nerolink`
-- **Requires:** Neroland Core `[1.4.0,2.0)` (loads before NeroLink)
+- **Requires:** Neroland Core `[1.13.0,2.0)` (loads before NeroLink)
 
 ## What the bridge does
 
 - **Pairing & tokens.** A player runs `/nerolink pair` in-game; the bridge
   whispers them a single-use `XXXX-XXXX` code (5-minute TTL, bound to their
-  UUID). A client redeems it once via `POST /api/v1/pair` for a long-lived,
-  revocable **device token**. No passwords, no email — the in-game session
-  *is* the identity proof.
+  UUID), plus a **Security code** when direct mode is reachable. A client
+  redeems the code once via `POST /api/v1/pair` for a long-lived, revocable
+  **device token** (on direct connections it sends a certificate-bound
+  `codeProof` rather than the code). No passwords, no email — the in-game
+  session *is* the identity proof. Failed redemptions are rate-limited per
+  source and globally.
 - **Discovery.** `GET /api/v1/discovery` reports the API revision, bridge/Core
   versions, server identity and the capability map — which Nero modules are
   present (and which are `absent`), so a client builds its UI from exactly what
@@ -56,7 +60,8 @@ this mod adds no blocks or items.
   deltas, batched at most once per second, with a consistent-start `snapshot`
   frame on subscribe and a 30-second heartbeat.
 - **Rate limits.** Per-token token-bucket (default 60 req/min, `429` +
-  `retryAfterMs` on breach) and a global concurrent-client cap.
+  `retryAfterMs` on breach), a pairing brute-force budget, a per-player device
+  cap and a global cap on live-update connections.
 
 Everything a client sees is scoped to the authenticated player. Game state is
 only ever touched on the server thread — the Netty I/O threads marshal work
@@ -64,9 +69,11 @@ across via `server.execute(...)`.
 
 ## Pairing quickstart
 
-1. In-game: `/nerolink pair` → note the whispered `XXXX-XXXX` code.
-2. In your companion client: enter the server address (`host:25580` by
-   default) and the code.
+1. In-game: `/nerolink pair` → note the whispered `XXXX-XXXX` code, and the
+   Server ID (relay) or Direct address and Security code (direct mode).
+2. In your companion client: enter the Server ID, or the direct address
+   (`host:25580` by default), and the code. In direct mode, check the Security
+   code the app shows matches the one in chat.
 3. The client stores the returned token securely and uses
    `Authorization: Bearer <token>` on every call.
 4. Manage devices in-game with `/nerolink devices` and
@@ -80,16 +87,20 @@ Config lives in Core's config system as `nerolink.properties` (reloadable with
 | Key | Default | Purpose |
 | --- | --- | --- |
 | `enabled` | `true` | Master switch; when false no socket is bound |
-| `port` | `25580` | HTTP + WebSocket port (change needs a restart) |
-| `bindAddress` | `0.0.0.0` | Interface to bind (`127.0.0.1` = local only) |
+| `port` | `25580` | Direct-mode HTTPS + WebSocket port (change needs a restart) |
+| `bindAddress` | `0.0.0.0` | Interface to bind on a dedicated server (`127.0.0.1` = local only) |
+| `directEnabled` | `true` | Run the direct listener; `false` = relay only |
+| `tlsEnabled` | `true` | TLS on the direct listener; plain HTTP only allowed on `127.0.0.1` |
+| `singleplayerLanAccess` | `false` | Let single-player worlds bind the network (else `127.0.0.1`) |
 | `rateLimitPerMinute` | `60` | Per-token REST budget per minute |
-| `maxClients` | `64` | Global concurrent-client cap |
-| `tokenExpiryDays` | `90` | Inactivity token expiry (checked lazily) |
+| `maxClients` | `64` | Global cap on live-update (WebSocket) connections |
+| `maxDevicesPerPlayer` | `5` | Devices one player may pair at once (`1`–`64`) |
+| `tokenExpiryDays` | `90` | Inactivity expiry; expired devices deleted by a 6-hourly sweep |
 | `readOnly` | `false` | Refuse all actions (snapshots still served) |
 | `allowOfflineActions` | `true` | When false, all actions need online player |
 | `actionsDisabled` | *(empty)* | Comma-separated `module/action` ids to block |
-| `snapshotCadenceHotMs` | `5000` | Hot-section cache cadence |
-| `snapshotCadenceColdMs` | `30000` | Cold-section cache cadence |
+| `snapshotCadenceHotMs` | `5000` | Reserved (not used yet) |
+| `snapshotCadenceColdMs` | `30000` | Reserved (not used yet) |
 | `relayOrigin` | `https://nerorelay.neroserver.xyz` | Relay used by `/nerolink setup` |
 | `relayUrl` | *(empty)* | **Advanced** manual-override tunnel URL (see below) |
 | `relayKey` | *(empty)* | **Advanced** manual-override server key — **keep secret** |
@@ -97,15 +108,29 @@ Config lives in Core's config system as `nerolink.properties` (reloadable with
 
 ### Security note (read before exposing the port)
 
-The direct LAN listener is **plain HTTP/WebSocket with no TLS**. Bearer device
-tokens and player-scoped data cross the network **in cleartext**, so anyone who
-can see the traffic can read them and replay a token.
+The direct listener serves **TLS** with a self-signed ECDSA P-256 certificate
+the bridge generates on first start (`config/nerolink/bridge-tls.p12`,
+owner-only permissions where supported, reused across worlds and restarts).
+The companion app pins the certificate's SHA-256 fingerprint at pairing, and
+pairing itself is bound to that certificate (`codeProof`), so the player
+comparing the **Security code** in chat with the one in the app is what
+defeats a man in the middle.
 
-- The default `bindAddress` is `0.0.0.0` — **all** interfaces. Restrict it to a
-  single LAN interface, or `127.0.0.1`, unless you understand the exposure.
-  **Never port-forward the bridge port to the public internet.**
-- The **relay is the encrypted option**: Cloudflare terminates TLS and the
-  bridge dials out over `wss://`, so nothing travels in the clear.
+- **Rotating the certificate:** delete `bridge-tls.p12` and restart; every
+  direct-mode device must then re-pair. A corrupt file is moved aside to
+  `bridge-tls.p12.broken` and replaced.
+- The default `bindAddress` on a dedicated server is `0.0.0.0` — **all**
+  interfaces. Restrict it to a LAN interface or `127.0.0.1`, or set
+  `directEnabled=false` and use the relay only, unless you mean to expose it.
+  Single-player worlds bind `127.0.0.1` unless `singleplayerLanAccess=true`.
+- `tlsEnabled=false` is only for local tooling on the same machine: the bridge
+  refuses plain HTTP unless `bindAddress` is `127.0.0.1`, and the NeroLink app's
+  direct mode always requires TLS.
+- Abuse limits: 16 KiB request bodies, 16 concurrent connections per address,
+  a 90 s idle timeout, JSON nesting capped at 32 levels, and a pairing budget
+  of 5 failures per source per minute with a 120-per-minute global backstop
+  (attempts are refused while a budget is exceeded; pending codes are never
+  voided, so a flood cannot lock players out once it stops).
 - `RelayClient` also accepts `ws://` / `http://` relay URLs. That is a
   deliberate downgrade path for a local `wrangler dev` relay only — never point
   it at a remote relay.
@@ -115,9 +140,11 @@ can see the traffic can read them and replay a token.
 A home or NAT'd server with no port forwarding can still serve companion
 clients through the **[NeroLink relay](../nerolink-relay)** — a small Cloudflare
 Worker. The bridge dials *out* and holds one WebSocket tunnel to the relay;
-phones connect to the relay; the relay marries the two and forwards traffic
-verbatim. The local HTTP/WS listener and the relay tunnel are independent —
-either, both, or neither may run at once.
+phones connect to the relay over HTTPS; the relay marries the two and forwards
+traffic verbatim. The relay is **not end-to-end encrypted**: it terminates TLS
+and reads traffic in memory to forward it (it never stores it). The direct
+listener and the relay tunnel are independent — either, both, or neither may
+run at once.
 
 **Setup (in-game, recommended):**
 
@@ -141,7 +168,8 @@ either, both, or neither may run at once.
      re-dials the existing tunnel.
 3. Players run `/nerolink pair` — the whisper now shows the **Server ID**
    prominently. **That id plus the one-time pairing code is all the app needs**
-   (no address to type). The whole API (pairing, discovery, snapshots, actions,
+   (no address to type). Over the relay the app sends the plain code, protected
+   by TLS to the relay's public certificate. The whole API (pairing, discovery, snapshots, actions,
    live WebSocket deltas) works exactly as on the LAN, just through the relay.
 
 > If the relay has `REGISTRATION_OPEN=false`, `/nerolink setup` reports
@@ -163,8 +191,11 @@ use `/nerolink setup`.
 per-world storage (or config, for the override) and is never logged; the
 bridge logs the relay **host** only. When enabled, the bridge also emits push
 `notify` frames for opted-in notification categories to players who are not
-currently watching live, and an `erase` tombstone (dropping a player's push
-tokens on the relay) whenever a POPIA/GDPR erasure runs.
+currently watching live, a `push_unbind` frame when a device is revoked or
+expires, and an `erase` tombstone (dropping a player's push tokens on the
+relay) whenever a POPIA/GDPR erasure runs. If the tunnel is down, `erase` and
+`push_unbind` frames are queued in the world's relay settings (up to 4096) and
+delivered on reconnect.
 
 ### Testing the relay from the dev launchers
 
@@ -194,24 +225,35 @@ script prints the `https://<relay>/s/<serverId>` address to use in the app
 The bridge stores the **lawful minimum**, all keyed to the Minecraft account
 the server already knows:
 
-- **Device tokens** — stored as a SHA-256 **hash** only (the plaintext token
-  is returned to the client once and never persisted or logged). Expire after
-  configurable inactivity.
+- **Device records** — the token as a SHA-256 **hash** only (the plaintext
+  token is returned to the client once and never persisted or logged), the
+  device name the player enters, and pairing and last-connected times.
 - **Notification preferences** — per-player category booleans, opt-in.
 - **Pending pairing codes** — transient, in-memory, single-use, 5-minute TTL.
+
+**Retention:** devices inactive for longer than `tokenExpiryDays` (default 90)
+are deleted by a sweep at bridge start and every 6 hours, and every token has
+an absolute lifetime of 365 days.
 
 No emails, no location, no chat, no names beyond the Minecraft username the
 server already has. The bridge keeps **no shadow copies** of mod data —
 anything a client shows is read live from the owning mods. Tokens, UUIDs and
-player names are never logged at INFO.
+player names are never logged at INFO, and client-supplied names are sanitised
+before logging.
 
 - `GET /api/v1/privacy/export` returns everything the bridge holds for you
   (device metadata + prefs) as JSON.
-- `POST /api/v1/privacy/erase` fires Core's shared `PlayerDataErasure` hook —
-  purging your bridge data (tokens, prefs, pending codes) alongside every other
-  mod's data — and drops your live sockets.
+- `POST /api/v1/privacy/erase` (the app's "Delete my NeroLink data") erases
+  NeroLink's own data — device tokens, prefs, pending code, live sockets and
+  relay push registrations. It is **bridge-scoped** on purpose: a token on a
+  phone cannot wipe game progress. To erase your data from every Neroland mod,
+  run `/neroland data eraseme` in-game; Core's shared `PlayerDataErasure` hook
+  purges NeroLink's data as part of that.
 - `GET /api/v1/privacy/notice` returns the server's data-processing notice.
-- `DELETE /api/v1/session` revokes the calling device's token.
+- `DELETE /api/v1/session` revokes the calling device's token and closes its
+  live socket.
+
+See [`PRIVACY.md`](PRIVACY.md) for the full statement.
 
 ## Layout
 
@@ -236,7 +278,7 @@ Stonecutter:
           :fabric:26.1.2:build :fabric:26.2:build :fabric:26.3:build   # all nine
 ```
 
-Core 1.4.0+ is resolved from `mavenLocal()` (run `./gradlew publishToMavenLocal`
+Core (build pin `1.13.0`) is resolved from `mavenLocal()` (run `./gradlew publishToMavenLocal`
 in `../neroland-core`) or from GitHub Packages on CI. See
 [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) for contributor context.
 

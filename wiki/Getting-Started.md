@@ -7,17 +7,21 @@ relay, from anywhere.
 
 ## Install
 
-1. Install **Neroland Core `1.4.0` or later** (the release that introduced the link API;
-   accepted range `[1.4.0,2.0)`) — NeroLink hard-depends on it and will not load without
-   it. Core loads first.
+1. Install **Neroland Core `1.13.0` or newer, below `2.0`** (accepted range
+   `[1.13.0,2.0)`) — NeroLink hard-depends on it and will not load without it. Core loads
+   first.
 2. Drop the NeroLink jar for your loader and Minecraft version into the server's `mods`
-   folder. NeroLink ships for **Fabric, Forge and NeoForge** on **Minecraft 26.1.2 and
-   26.2**.
+   folder. NeroLink ships for **Fabric, Forge and NeoForge** on **Minecraft 26.1.2, 26.2
+   and 26.3**.
 3. Start the server. NeroLink binds its bridge on server-start (a live world must exist),
    using the settings in `config/nerolink.properties` — see [Configuration](Configuration.md).
 
-That's it — there is no gameplay content to unlock. On first start the bridge listens on
-port **`25580`** on all interfaces (`0.0.0.0`).
+That's it — there is no gameplay content to unlock. On first start a **dedicated server**
+listens on port **`25580`** on all interfaces (`0.0.0.0`), over TLS with a self-signed
+certificate it generates and keeps at `config/nerolink/bridge-tls.p12`. A **single-player**
+world binds `127.0.0.1` only, so it never opens a network port on its own; set
+`singleplayerLanAccess=true` to let phones on your network in, or use the relay. Admins who
+only want the relay can set `directEnabled=false`.
 
 ## LAN / direct quickstart
 
@@ -27,13 +31,25 @@ Direct mode is the simplest path when your phone and the server are on the same 
    ```
    /nerolink pair
    ```
-   The bridge **whispers only to you** a single-use pairing code (format `XXXX-XXXX`),
-   the **bridge address** (`host:25580` by default), and — if a relay is active — a
-   **Server ID**. The code is valid for **5 minutes** and can be used once.
-2. In your companion client, choose direct/LAN mode and enter the **bridge address** and
+   The bridge **whispers only to you** a single-use pairing code (format `XXXX-XXXX`), the
+   **Direct address** (`host:25580` by default), a **Security code**
+   (`XXXX-XXXX-XXXX-XXXX`), and — if a relay is active — a **Server ID**. The code is valid
+   for **5 minutes** and can be used once.
+2. In your companion client, choose direct/LAN mode and enter the **Direct address** and
    the **code**.
-3. The client redeems the code once and stores a long-lived, revocable **device token**;
-   from then on it authenticates every call with that token.
+3. **Check the Security code.** The app shows a Security code too; it must match the one
+   in chat. If it doesn't, stop — something between your phone and the server is not the
+   bridge.
+4. The client pairs once and stores a long-lived, revocable **device token**; from then on
+   it authenticates every call with that token and only trusts this server's certificate.
+   The pairing code itself never crosses the network in direct mode — the app sends a
+   proof bound to the certificate instead.
+
+Direct mode needs a current NeroLink app: older apps that send the plain code are refused
+with "codeProof required on direct connections (update the NeroLink app)".
+
+If an admin deletes `bridge-tls.p12` to rotate the certificate, every direct-mode device
+must pair again.
 
 > ⚠️ **The bridge address is *not* the "Open to LAN" game port.** When you open a
 > single-player world to LAN, Minecraft prints an ephemeral game port (e.g. `55001`) —
@@ -41,8 +57,9 @@ Direct mode is the simplest path when your phone and the server are on the same 
 > `port` in the config). The pairing whisper deliberately shows the bridge port so you
 > don't copy the game port by mistake.
 
-If your phone can't reach the LAN address (home server behind NAT, no port forwarding),
-use the relay instead — no address to type at all.
+If your phone can't reach the direct address (home server behind NAT, no port forwarding,
+or a single-player world), use the relay instead — no address to type at all. If neither
+is available, `/nerolink pair` tells you so.
 
 ## Remote access via the relay (one command)
 
@@ -69,7 +86,7 @@ config first. See [Relay](Relay.md) for the full flow and self-hosting.
 ## Pairing a companion client with a Server ID
 
 When a relay is active, `/nerolink pair` shows the **Server ID** prominently, above the
-LAN address. **That Server ID plus the one-time pairing code is all the app needs** — no
+direct address. **That Server ID plus the one-time pairing code is all the app needs** — no
 address to type. Pairing, discovery, snapshots, actions and live deltas all work exactly
 as they do on the LAN, just through the relay.
 
@@ -83,7 +100,10 @@ server. See the [API](API.md#in-app-wiki) if you're building a client.
 ## Managing your devices
 
 - `/nerolink devices` — list the devices you've paired (names + ids, never tokens).
-- `/nerolink revoke <device-id>` — revoke one of your own devices.
+- `/nerolink revoke <device-id>` — revoke one of your own devices (its live connection
+  closes immediately).
+- Each player can pair up to `maxDevicesPerPlayer` devices (default 5); devices unused for
+  90 days are deleted automatically.
 - Operators can check `/nerolink status` for bridge/relay health.
 
 Full details on the [Commands](Commands.md) page.

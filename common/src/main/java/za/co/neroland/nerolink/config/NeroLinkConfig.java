@@ -38,7 +38,27 @@ public final class NeroLinkConfig {
 
     public static final ConfigValue<String> BIND_ADDRESS = SCHEMA.string(
             "bindAddress", "0.0.0.0", true,
-            "Interface the bridge binds. 0.0.0.0 = all; 127.0.0.1 = local/relay-forward only.");
+            "Interface the direct-mode listener binds on a DEDICATED server. 0.0.0.0 = all interfaces "
+                    + "(LAN / port-forwarded phones can connect directly); 127.0.0.1 = this machine only "
+                    + "(use the relay for phones). Single-player worlds always bind 127.0.0.1 unless "
+                    + "singleplayerLanAccess=true. Traffic is always TLS-encrypted (see tlsEnabled).");
+
+    public static final ConfigValue<Boolean> DIRECT_ENABLED = SCHEMA.bool(
+            "directEnabled", true, true,
+            "Run the direct-mode listener (LAN / port-forward). Set false to use the relay only; "
+                    + "the relay tunnel is outbound and needs no listener.");
+
+    public static final ConfigValue<Boolean> TLS_ENABLED = SCHEMA.bool(
+            "tlsEnabled", true, true,
+            "Encrypt the direct-mode listener with the bridge's self-signed certificate, which the "
+                    + "companion app pins at pairing (config/nerolink/bridge-tls.p12; delete it to rotate "
+                    + "- every device must then re-pair). The NeroLink app's direct mode requires this. "
+                    + "false is only for local tooling: plain HTTP is refused unless bindAddress is 127.0.0.1.");
+
+    public static final ConfigValue<Boolean> SINGLEPLAYER_LAN_ACCESS = SCHEMA.bool(
+            "singleplayerLanAccess", false, true,
+            "Let phones on your network reach the bridge while you play single-player. Off by default, "
+                    + "so a single-player world never opens a network port on its own.");
 
     public static final ConfigValue<Integer> RATE_LIMIT_PER_MINUTE = SCHEMA.intRange(
             "rateLimitPerMinute", 60, 1, 6000, true,
@@ -46,11 +66,18 @@ public final class NeroLinkConfig {
 
     public static final ConfigValue<Integer> MAX_CLIENTS = SCHEMA.intRange(
             "maxClients", 64, 1, 4096, true,
-            "Global cap on concurrent paired clients (REST + WS). Protects a busy server.");
+            "Global cap on concurrent live-update (WebSocket) connections, direct + relay. "
+                    + "Protects a busy server; extra connections are refused until one closes.");
+
+    public static final ConfigValue<Integer> MAX_DEVICES_PER_PLAYER = SCHEMA.intRange(
+            "maxDevicesPerPlayer", 5, 1, 64, true,
+            "How many devices one player may pair at once. Pairing beyond this is refused; "
+                    + "revoke one with /nerolink revoke <device-id>.");
 
     public static final ConfigValue<Integer> TOKEN_EXPIRY_DAYS = SCHEMA.intRange(
             "tokenExpiryDays", 90, 1, 3650, true,
-            "Device tokens expire after this many days of inactivity (lazily on next use).");
+            "Device tokens expire after this many days of inactivity; expired devices are deleted "
+                    + "by a periodic sweep (and every token expires after 365 days regardless).");
 
     public static final ConfigValue<Boolean> READ_ONLY = SCHEMA.bool(
             "readOnly", false, true,
@@ -66,11 +93,11 @@ public final class NeroLinkConfig {
 
     public static final ConfigValue<Integer> SNAPSHOT_CADENCE_HOT_MS = SCHEMA.intRange(
             "snapshotCadenceHotMs", 5000, 500, 600000, true,
-            "Cache cadence for hot sections (energy, drones). WS deltas batch to at most one per second.");
+            "Reserved for snapshot caching (not used yet). WS deltas already batch to at most one per second.");
 
     public static final ConfigValue<Integer> SNAPSHOT_CADENCE_COLD_MS = SCHEMA.intRange(
             "snapshotCadenceColdMs", 30000, 500, 600000, true,
-            "Cache cadence for cold sections (stock, storage).");
+            "Reserved for snapshot caching of cold sections (not used yet).");
 
     public static final ConfigValue<String> RELAY_ORIGIN = SCHEMA.string(
             "relayOrigin", "https://nerorelay.neroserver.xyz", true,
@@ -93,10 +120,13 @@ public final class NeroLinkConfig {
 
     public static final ConfigValue<String> PRIVACY_NOTICE_TEXT = SCHEMA.string(
             "privacyNoticeText",
-            "This server's NeroLink bridge stores only: a hashed device token, your "
-                    + "notification preferences, and pending pairing codes - all keyed to your "
-                    + "Minecraft account and erasable on request. No email, no location, no chat. "
-                    + "All data shown is scoped to you.",
+            "This server's NeroLink bridge stores, keyed to your Minecraft account: a hashed "
+                    + "device token, the device name you enter, when you paired and last connected, and "
+                    + "your notification preferences. Devices you stop using are deleted automatically. No email, "
+                    + "no location, no chat. Everything shown is your own data. You can export or delete "
+                    + "it from the app's Privacy settings at any time. If this server uses a NeroLink relay, "
+                    + "your requests pass through it (encrypted to the relay, operated on Cloudflare) "
+                    + "without their content being stored there.",
             false,
             "Data-processing notice returned by GET /privacy/notice and shown at first pairing.");
 

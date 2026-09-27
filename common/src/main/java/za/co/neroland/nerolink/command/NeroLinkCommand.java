@@ -92,11 +92,27 @@ public final class NeroLinkCommand {
                 .append(Component.literal(id).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
                 .append(Component.literal("  (enter this + the code in the app)")
                         .withStyle(ChatFormatting.DARK_GRAY))));
-        player.sendSystemMessage(Component.empty()
-                .append(Component.literal("Bridge address: ").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(bridgeAddress()).withStyle(ChatFormatting.AQUA))
-                .append(Component.literal("  (LAN/direct mode — NOT the 'open to LAN' game port)")
-                        .withStyle(ChatFormatting.DARK_GRAY)));
+        NeroLinkBridge.DirectEndpoint direct = NeroLinkBridge.instance().direct();
+        if (direct.running() && !direct.loopbackOnly()) {
+            player.sendSystemMessage(Component.empty()
+                    .append(Component.literal("Direct address: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(bridgeAddress(direct)).withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal("  (same network - NOT the 'open to LAN' game port)")
+                            .withStyle(ChatFormatting.DARK_GRAY)));
+            var tls = NeroLinkBridge.instance().tls();
+            if (tls != null) {
+                player.sendSystemMessage(Component.empty()
+                        .append(Component.literal("Security code: ").withStyle(ChatFormatting.GRAY))
+                        .append(Component.literal(tls.shortFingerprint()).withStyle(ChatFormatting.GREEN))
+                        .append(Component.literal("  (the app shows this too - they must match)")
+                                .withStyle(ChatFormatting.DARK_GRAY)));
+            }
+        } else if (serverId.isEmpty()) {
+            player.sendSystemMessage(Component.literal(
+                    "Your phone can't reach this world yet: an admin can run /nerolink setup (relay), or in "
+                            + "single-player set singleplayerLanAccess=true in config/nerolink.properties and reload the world.")
+                    .withStyle(ChatFormatting.YELLOW));
+        }
         player.sendSystemMessage(Component.literal(
                 "Enter within 5 minutes. Single-use.")
                 .withStyle(ChatFormatting.DARK_GRAY));
@@ -146,11 +162,10 @@ public final class NeroLinkCommand {
      * the bridge's configured port — deliberately NOT the ephemeral "open to LAN" game port,
      * which players otherwise tend to copy by mistake. No personal data involved.
      */
-    private static String bridgeAddress() {
-        int port = za.co.neroland.nerolink.config.NeroLinkConfig.PORT.get();
-        String bind = za.co.neroland.nerolink.config.NeroLinkConfig.BIND_ADDRESS.get();
-        String host = "0.0.0.0".equals(bind) ? firstSiteLocalIpv4() : bind;
-        return host + ":" + port;
+    private static String bridgeAddress(NeroLinkBridge.DirectEndpoint direct) {
+        String bind = direct.bindAddress();
+        String host = "0.0.0.0".equals(bind) || "::".equals(bind) ? firstSiteLocalIpv4() : bind;
+        return host + ":" + direct.port();
     }
 
     private static String firstSiteLocalIpv4() {
@@ -216,10 +231,11 @@ public final class NeroLinkCommand {
             ctx.getSource().sendFailure(Component.literal("[NeroLink] No such device of yours: " + deviceId));
             return 0;
         }
+        Optional<TokenStore.Device> row = tokens.device(deviceId);
         tokens.revoke(deviceId);
         NeroLinkBridge bridge = NeroLinkBridge.instance();
-        if (bridge != null) {
-            bridge.rateLimiter().forget(deviceId);
+        if (bridge != null && row.isPresent()) {
+            bridge.onDeviceRemoved(row.get()); // closes its live socket + unbinds relay push
         }
         player.sendSystemMessage(Component.literal("[NeroLink] Device revoked: " + deviceId)
                 .withStyle(ChatFormatting.GREEN));
@@ -237,13 +253,20 @@ public final class NeroLinkCommand {
         List<LinkModuleInfo> modules = NeroLinkRegistry.modules();
         String moduleList = modules.isEmpty() ? "(none)"
                 : String.join(", ", modules.stream().map(LinkModuleInfo::moduleId).toList());
-        int deviceCount = countDevices(bridge);
+        int deviceCount = bridge.tokens().deviceCount();
+        NeroLinkBridge.DirectEndpoint direct = bridge.direct();
+        String directText = direct.running()
+                ? direct.bindAddress() + ":" + direct.port() + (direct.tls() ? " (TLS " + bridge.tls().shortFingerprint() + ")" : " (plain, loopback)")
+                : "off - " + direct.reason();
         String relayState = relayStateText(bridge);
         Optional<String> serverId = activeServerId(bridge.server());
         String serverIdText = serverId.map(id -> "Server ID: " + id + ". ").orElse("");
         src.sendSuccess(() -> Component.literal("[NeroLink] Bridge running. ")
                 .withStyle(ChatFormatting.AQUA)
-                .append(Component.literal("Paired devices: " + deviceCount + ". ")
+                .append(Component.literal("Paired devices: " + deviceCount + ", live connections: "
+                        + bridge.wsHub().connectionCount() + ". ")
+                        .withStyle(ChatFormatting.GRAY))
+                .append(Component.literal("Direct: " + directText + ". ")
                         .withStyle(ChatFormatting.GRAY))
                 .append(Component.literal("Relay: " + relayState + ". ")
                         .withStyle(ChatFormatting.GRAY))
@@ -293,7 +316,7 @@ public final class NeroLinkCommand {
                 .withStyle(ChatFormatting.GRAY), false);
 
         String serverName = serverName(server);
-        String userAgent = "nerolink-bridge/" + NeroLinkCommon.BRIDGE_VERSION;
+        String userAgent = "nerolink-bridge/" + NeroLinkCommon.bridgeVersion();
         RelayRegistrar.register(origin, serverName, userAgent).whenComplete((result, error) ->
                 // Marshal back onto the server thread before touching SavedData or the source.
                 server.execute(() -> onSetupComplete(src, server, origin, result, error)));
@@ -383,14 +406,5 @@ public final class NeroLinkCommand {
             case CONNECTING -> "connecting";
             case DISABLED -> "disabled";
         };
-    }
-
-    private static int countDevices(NeroLinkBridge bridge) {
-        // Total paired devices across all players (op-visible aggregate, no personal data).
-        int total = 0;
-        for (ServerPlayer p : bridge.server().getPlayerList().getPlayers()) {
-            total += bridge.tokens().devicesOf(p.getUUID()).size();
-        }
-        return total;
     }
 }

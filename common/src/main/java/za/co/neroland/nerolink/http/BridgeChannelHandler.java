@@ -8,7 +8,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
@@ -54,11 +53,19 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
     private static final String API_PREFIX = "/api/v1/";
 
     private final NeroLinkBridge bridge;
+    private final String source;
+    private final boolean tls;
     private WebSocketServerHandshaker handshaker;
     private HubConnection wsConnection;
 
-    public BridgeChannelHandler(NeroLinkBridge bridge) {
+    /**
+     * @param remote the client address (pairing brute-force budget key); may be null
+     * @param tls    whether this connection is over the bridge's pinned TLS certificate
+     */
+    public BridgeChannelHandler(NeroLinkBridge bridge, java.net.InetAddress remote, boolean tls) {
         this.bridge = bridge;
+        this.source = remote == null ? "direct" : remote.getHostAddress();
+        this.tls = tls;
     }
 
     @Override
@@ -99,7 +106,8 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
         String bearer = bearerToken(request);
         boolean keepAlive = HttpUtil.isKeepAlive(request);
 
-        ApiRequest apiRequest = new ApiRequest(request.method().name(), segments, query, body, bearer);
+        ApiRequest apiRequest = new ApiRequest(request.method().name(), segments, query, body, bearer,
+                tls ? ApiRequest.Transport.DIRECT_TLS : ApiRequest.Transport.DIRECT_PLAIN, source);
 
         bridge.dispatcher().handle(apiRequest).whenComplete((response, error) -> {
             ApiResponse resp = error != null
@@ -117,6 +125,8 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
                 Unpooled.wrappedBuffer(bytes));
         httpResponse.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
         httpResponse.headers().setInt(HttpHeaderNames.CONTENT_LENGTH, bytes.length);
+        // Responses can carry a freshly issued token or personal data: never cache them.
+        httpResponse.headers().set(HttpHeaderNames.CACHE_CONTROL, "no-store");
         if (keepAlive) {
             httpResponse.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
             ctx.writeAndFlush(httpResponse);
@@ -150,6 +160,11 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
         long expiryMillis = NeroLinkConfig.TOKEN_EXPIRY_DAYS.get() * 24L * 60 * 60 * 1000;
         Optional<TokenStore.Device> auth = bridge.tokens()
                 .authenticate(bridge.server(), token, expiryMillis);
+        if (auth.isPresent() && !bridge.rateLimiter().check(auth.get().deviceId()).allowed()) {
+            writeJson(ctx, HttpResponseStatus.TOO_MANY_REQUESTS,
+                    Json.error(ApiErrors.RATE_LIMITED, "rate limit exceeded"), request);
+            return;
+        }
         if (auth.isEmpty()) {
             writeJson(ctx, HttpResponseStatus.UNAUTHORIZED,
                     Json.error(ApiErrors.UNAUTHORIZED, "invalid bearer token"), request);
@@ -166,8 +181,14 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
         }
         handshaker.handshake(ctx.channel(), request).addListener(future -> {
             if (future.isSuccess()) {
-                wsConnection = new HubConnection(ctx, device.player(), device.deviceId());
-                bridge.wsHub().register(wsConnection);
+                HubConnection conn = new HubConnection(ctx, device.player(), device.deviceId());
+                if (!bridge.wsHub().register(conn)) {
+                    // At the maxClients cap: 1013 "try again later".
+                    ctx.channel().writeAndFlush(new CloseWebSocketFrame(1013, "server busy"))
+                            .addListener(ChannelFutureListener.CLOSE);
+                    return;
+                }
+                wsConnection = conn;
             }
         });
     }
@@ -175,7 +196,7 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
     private void handleWebSocketFrame(ChannelHandlerContext ctx, WebSocketFrame frame) {
         if (frame instanceof CloseWebSocketFrame close) {
             if (handshaker != null) {
-                handshaker.close(ctx.channel(), (CloseWebSocketFrame) close.retain());
+                handshaker.close(ctx.channel(), close.retain());
             }
             return;
         }
@@ -187,11 +208,13 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
             return; // heartbeat ack
         }
         if (frame instanceof TextWebSocketFrame text && wsConnection != null) {
-            try {
-                JsonObject control = JsonParser.parseString(text.text()).getAsJsonObject();
+            // Control frames cost the same budget as REST calls, so a client cannot flood the hub.
+            if (!bridge.rateLimiter().check(wsConnection.connectionId()).allowed()) {
+                return;
+            }
+            JsonObject control = Json.parseObject(text.text());
+            if (control != null) {
                 bridge.wsHub().onControlFrame(wsConnection.connectionId(), control);
-            } catch (Exception e) {
-                NeroLinkCommon.LOGGER.debug("[NeroLink] bad ws control frame", e);
             }
         }
     }
@@ -199,7 +222,7 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
         if (wsConnection != null) {
-            bridge.wsHub().unregister(wsConnection.connectionId());
+            bridge.wsHub().unregister(wsConnection);
             wsConnection = null;
         }
     }
@@ -263,12 +286,7 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
         if (request.content().readableBytes() == 0) {
             return null;
         }
-        String raw = request.content().toString(StandardCharsets.UTF_8);
-        try {
-            return JsonParser.parseString(raw).getAsJsonObject();
-        } catch (Exception e) {
-            return null;
-        }
+        return Json.parseObject(request.content().toString(StandardCharsets.UTF_8));
     }
 
     private static List<String> splitSegments(String path) {
@@ -281,8 +299,8 @@ public final class BridgeChannelHandler extends SimpleChannelInboundHandler<Obje
         return out;
     }
 
-    private static String wsLocation(FullHttpRequest request) {
+    private String wsLocation(FullHttpRequest request) {
         String host = request.headers().get(HttpHeaderNames.HOST);
-        return "ws://" + (host == null ? "localhost" : host) + WS_PATH;
+        return (tls ? "wss://" : "ws://") + (host == null ? "localhost" : host) + WS_PATH;
     }
 }

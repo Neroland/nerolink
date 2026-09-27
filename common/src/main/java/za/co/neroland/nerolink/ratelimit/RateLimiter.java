@@ -11,7 +11,8 @@ import za.co.neroland.nerolink.config.NeroLinkConfig;
  * answers {@code 429 RATE_LIMITED} with a {@code retryAfterMs} hint. A global concurrent-client
  * cap ({@code maxClients}) is enforced separately at the pairing/connect seam.
  *
- * <p>Buckets are keyed by device id (stable per token) and pruned lazily. Thread-safe: called
+ * <p>Buckets are keyed by device id (stable per token); idle buckets are dropped by
+ * {@link #prune()} from the bridge's housekeeping loop. Thread-safe: called
  * from Netty I/O threads before any game work is scheduled.
  */
 public final class RateLimiter {
@@ -59,6 +60,16 @@ public final class RateLimiter {
             long retryMs = (long) Math.ceil(needed / (perMinute / 60_000.0));
             return new Decision(false, Math.max(1L, retryMs));
         }
+    }
+
+    /** Drop buckets idle for over ten minutes (they would be full again anyway). */
+    public void prune() {
+        long cutoff = System.nanoTime() - 10L * 60 * 1_000_000_000L;
+        buckets.entrySet().removeIf(e -> {
+            synchronized (e.getValue()) {
+                return e.getValue().lastRefillNanos < cutoff;
+            }
+        });
     }
 
     /** Drop a token's bucket (on revoke). */

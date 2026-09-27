@@ -1,6 +1,11 @@
 package za.co.neroland.nerolink.relay;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
+
+import com.google.gson.JsonObject;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -25,9 +30,12 @@ import za.co.neroland.nerolink.NeroLinkCommon;
  *   <li>{@code registeredAt} — epoch millis of registration.</li>
  * </ul>
  *
- * <p><b>Not player data.</b> This is a single server-scoped credential row — there is no player
- * UUID here, so it is outside Core's per-player erasure hook. The {@code serverKey} is the only
- * secret; it is treated like {@code TokenStore}'s hashes and is never emitted to logs or chat.
+ * <p><b>Player data.</b> The credential row is server-scoped. The only player data is the
+ * <i>outbound erasure queue</i>: when a player is erased (or a device revoked) while the relay
+ * tunnel is down, a tombstone {@code erase:<uuid>} / {@code unbind:<uuid>:<deviceId>} is kept here
+ * until the tunnel reconnects and delivers it, then removed. That is the minimum needed for the
+ * erasure to reach the relay at all (POPIA s24 / GDPR Art. 17(2)); entries are capped and never
+ * logged. The {@code serverKey} is the only secret and is never emitted to logs or chat.
  *
  * <p>Persistence mirrors {@link za.co.neroland.nerolink.auth.TokenStore} exactly
  * ({@link SavedDataType} + Codec on the overworld data storage), keeping storage loader-neutral.
@@ -45,13 +53,19 @@ public final class RelaySettings extends SavedData {
     private String tunnelUrl;
     private String baseUrl;
     private long registeredAt;
+    /** Undelivered relay instructions: {@code erase:<uuid>} or {@code unbind:<uuid>:<deviceId>}. */
+    private final List<String> pendingOps = new ArrayList<>();
+
+    /** Bound on the queue so a long-offline relay cannot grow the save without limit. */
+    static final int MAX_PENDING_OPS = 4096;
 
     public RelaySettings() {
-        this("", "", "", "", "", 0L);
+        this("", "", "", "", "", 0L, List.of());
     }
 
     private RelaySettings(String relayOrigin, String serverId, String serverKey,
-                          String tunnelUrl, String baseUrl, long registeredAt) {
+                          String tunnelUrl, String baseUrl, long registeredAt, List<String> pendingOps) {
+        this.pendingOps.addAll(pendingOps == null ? List.of() : pendingOps);
         this.relayOrigin = relayOrigin == null ? "" : relayOrigin;
         this.serverId = serverId == null ? "" : serverId;
         this.serverKey = serverKey == null ? "" : serverKey;
@@ -97,6 +111,69 @@ public final class RelaySettings extends SavedData {
         this.baseUrl = "";
         this.registeredAt = 0L;
         setDirty();
+    }
+
+    // --- outbound erasure queue ------------------------------------------------------
+
+    /** Queue a player-erasure tombstone for the relay (their push registrations). */
+    public synchronized void queueErase(UUID player) {
+        // An erase supersedes any queued unbinds for the same player.
+        String prefix = "unbind:" + player + ":";
+        pendingOps.removeIf(op -> op.startsWith(prefix));
+        addOp("erase:" + player);
+    }
+
+    /** Queue a single-device push unbind for the relay. */
+    public synchronized void queueUnbind(UUID player, String deviceId) {
+        if (deviceId.indexOf(':') >= 0) {
+            return;
+        }
+        addOp("unbind:" + player + ":" + deviceId);
+    }
+
+    private void addOp(String op) {
+        if (pendingOps.contains(op)) {
+            return;
+        }
+        if (pendingOps.size() >= MAX_PENDING_OPS) {
+            pendingOps.remove(0);
+        }
+        pendingOps.add(op);
+        setDirty();
+    }
+
+    /** Snapshot of the queue, oldest first. */
+    public synchronized List<String> pendingRelayOps() {
+        return List.copyOf(pendingOps);
+    }
+
+    public synchronized void removeRelayOp(String op) {
+        if (pendingOps.remove(op)) {
+            setDirty();
+        }
+    }
+
+    /** Build the tunnel frame for a queued op, or null if it is malformed. */
+    public static JsonObject opFrame(String op) {
+        String[] parts = op.split(":", 3);
+        try {
+            if (parts.length == 2 && parts[0].equals("erase")) {
+                JsonObject f = new JsonObject();
+                f.addProperty("t", "erase");
+                f.addProperty("playerUuid", UUID.fromString(parts[1]).toString());
+                return f;
+            }
+            if (parts.length == 3 && parts[0].equals("unbind")) {
+                JsonObject f = new JsonObject();
+                f.addProperty("t", "push_unbind");
+                f.addProperty("playerUuid", UUID.fromString(parts[1]).toString());
+                f.addProperty("deviceId", parts[2]);
+                return f;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // fall through: malformed entry is dropped by the caller
+        }
+        return null;
     }
 
     // --- getters ---------------------------------------------------------------------
@@ -147,7 +224,9 @@ public final class RelaySettings extends SavedData {
                 Codec.STRING.optionalFieldOf("server_key", "").forGetter(RelaySettings::serverKey),
                 Codec.STRING.optionalFieldOf("tunnel_url", "").forGetter(RelaySettings::tunnelUrl),
                 Codec.STRING.optionalFieldOf("base_url", "").forGetter(RelaySettings::baseUrl),
-                Codec.LONG.optionalFieldOf("registered_at", 0L).forGetter(RelaySettings::registeredAt)
+                Codec.LONG.optionalFieldOf("registered_at", 0L).forGetter(RelaySettings::registeredAt),
+                Codec.STRING.listOf().optionalFieldOf("pending_relay_ops", List.of())
+                        .forGetter(RelaySettings::pendingRelayOps)
         ).apply(inst, RelaySettings::new));
     }
 }

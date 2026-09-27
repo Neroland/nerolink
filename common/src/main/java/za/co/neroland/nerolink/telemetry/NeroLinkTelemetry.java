@@ -93,7 +93,7 @@ public final class NeroLinkTelemetry {
                     + "error reporting is inactive.");
             return;
         }
-        String version = NeroLinkCommon.BRIDGE_VERSION;
+        String version = NeroLinkCommon.bridgeVersion();
         Sentry.init(options -> {
             options.setDsn(DSN);
             options.setRelease("nerolink@" + version);

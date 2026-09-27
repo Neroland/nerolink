@@ -44,6 +44,57 @@ public final class Json {
         return env;
     }
 
+    /** Deepest nesting accepted from a client; real payloads are 2-3 levels deep. */
+    static final int MAX_DEPTH = 32;
+
+    /**
+     * Parse untrusted client JSON into an object, or null if it is not a JSON object, is nested
+     * deeper than {@link #MAX_DEPTH} (checked before parsing, so a hostile body cannot overflow
+     * the parser's stack), or is otherwise malformed. Never throws.
+     */
+    public static JsonObject parseObject(String raw) {
+        if (raw == null || raw.isEmpty() || exceedsDepth(raw, MAX_DEPTH)) {
+            return null;
+        }
+        try {
+            JsonElement el = com.google.gson.JsonParser.parseString(raw);
+            return el != null && el.isJsonObject() ? el.getAsJsonObject() : null;
+        } catch (RuntimeException | StackOverflowError e) {
+            return null;
+        }
+    }
+
+    /** Whether brackets/braces (outside strings) nest deeper than {@code max}. */
+    static boolean exceedsDepth(String raw, int max) {
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            switch (c) {
+                case '"' -> inString = true;
+                case '{', '[' -> {
+                    if (++depth > max) {
+                        return true;
+                    }
+                }
+                case '}', ']' -> depth--;
+                default -> { }
+            }
+        }
+        return false;
+    }
+
     public static String toString(JsonElement element) {
         return GSON.toJson(element);
     }

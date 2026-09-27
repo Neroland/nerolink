@@ -8,8 +8,9 @@ modId = "${mod_id}"
 version = "${mod_version}"
 displayName = "${mod_name}"
 authors = "${mod_authors}"
+displayURL = "https://neroland.co.za"
 description = '''
-NeroLink - multiloader build (NeoForge).
+Server-side bridge for the NeroLink companion app: pair your phone in-game and see your Neroland base live - energy, quests, progression and more - over a pinned TLS connection or the NeroLink relay. Requires Neroland Core.
 '''
 
 [[mixins]]

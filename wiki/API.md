@@ -2,8 +2,8 @@
 
 This page is for **client and tool developers**. Everything here is drawn from the bridge
 implementation, which is **authoritative** wherever any other API description disagrees with
-it. The current API revision is **`1`** and the bridge version is
-`0.0.1-alpha.2`.
+it. The current API revision is **`1`**; this page describes the bridge from **1.0.0**
+(discovery reports the exact installed `bridgeVersion`).
 
 Every authenticated response is scoped to the token's player — a paired device sees and
 acts on **its own player's data only**. Game state is only ever touched on the server
@@ -13,27 +13,29 @@ thread; I/O threads marshal work across via `server.execute(...)`.
 
 All routes live under a versioned prefix. There are two ways to reach them:
 
-- **Direct / LAN:** `http://<host>:25580/api/v1/...` and WebSocket
-  `ws://<host>:25580/ws/v1`. The port is `port` from the config (`25580` by default).
+- **Direct / LAN:** `https://<host>:25580/api/v1/...` and WebSocket
+  `wss://<host>:25580/ws/v1`. The port is `port` from the config (`25580` by default).
+  The bridge serves TLS with its own self-signed certificate (see
+  [Direct-mode TLS](#direct-mode-tls)).
 - **Relay:** `https://<relay>/s/<serverId>/api/v1/...` and WebSocket
   `wss://<relay>/s/<serverId>/ws/v1`. The relay forwards frames **verbatim**, so the API
   is byte-for-byte identical; only the base URL differs. Here `<serverId>` is the relay's
   short Server ID (case-insensitive) from `/nerolink setup`. See [Relay](Relay.md).
 
-> **Security note.** The direct/LAN path has **no TLS** — it is plain HTTP and
-> WebSocket, so `Authorization: Bearer <token>` headers and all player-scoped
-> data travel in **cleartext**. Bind the bridge to a LAN interface or
-> `127.0.0.1` (`bindAddress`) and never port-forward the port to the internet.
-> The **relay path is the encrypted option**: TLS terminates at Cloudflare and
-> the bridge dials out over `wss://`. The bridge also accepts `ws://`/`http://`
-> relay URLs, but that is only for a local `wrangler dev` relay — never for a
-> remote one.
+> **Security note.** The direct listener is TLS-only by default. Its certificate is
+> self-signed, so clients must **pin** it rather than rely on a CA — see
+> [Direct-mode TLS](#direct-mode-tls). The relay is **not end-to-end encrypted**: TLS
+> terminates at the relay, which reads traffic in memory to forward it (never storing
+> it). The bridge also accepts `ws://`/`http://` relay URLs, but that is only for a local
+> `wrangler dev` relay — never for a remote one.
 
 > **Relay transport note.** Over the relay, REST calls are multiplexed on one tunnel with
 > request ids and WebSocket frames pass straight through (wire protocol in the
 > `nerolink-relay` repo's `src/protocol.ts`). Two error statuses are produced by the
 > **relay itself**, not the bridge: `503 BRIDGE_OFFLINE` when the tunnel is down, and
-> `504 BRIDGE_TIMEOUT` if the bridge doesn't answer within 30 s.
+> `504 BRIDGE_TIMEOUT` if the bridge doesn't answer within 30 s. Tunnel `req` frames may
+> carry an `ip` field — a salted hash used for pairing rate limits, never an IP — and the
+> bridge sends `push_unbind {playerUuid, deviceId}` when a device is revoked or expires.
 
 ## Envelope
 
@@ -59,16 +61,26 @@ signal as the `code` (see [Errors](#errors)).
 You obtain a token by **pairing**:
 
 1. A player runs `/nerolink pair` in-game and reads their one-time code (`XXXX-XXXX`,
-   5-minute TTL, single-use).
-2. The client posts it:
+   5-minute TTL, single-use). When direct mode is reachable from the network the whisper
+   also shows the **Direct address** and a **Security code**.
+2. The client posts it. **Over the relay** it sends the plain code (protected by TLS to
+   the relay's public certificate):
    ```
    POST /api/v1/pair
    { "code": "AB12-CD34", "deviceName": "Pixel 8" }
    ```
-   On success:
+   **On a direct connection** it sends a certificate-bound proof instead of the code:
+   ```
+   POST /api/v1/pair
+   { "codeProof": "<64 hex chars>", "deviceName": "Pixel 8" }
+   ```
+   A plain `code` on the direct TLS listener is rejected with `400 VALIDATION`
+   ("codeProof required on direct connections (update the NeroLink app)").
+3. On success:
    ```json
    { "ok": true, "data": {
        "token": "<long-lived bearer token>",
+       "deviceId": "…",
        "playerUuid": "…",
        "playerName": "Steve",
        "serverId": "…",
@@ -77,11 +89,39 @@ You obtain a token by **pairing**:
    ```
    The plaintext `token` is returned **once** and never stored server-side (only a SHA-256
    hash is kept). Send it as the Bearer token on every subsequent call. An invalid or
-   expired code returns `401 UNAUTHORIZED`; exceeding the device cap returns
-   `429 RATE_LIMITED` ("device limit reached").
+   expired code returns `401 UNAUTHORIZED`; pairing past `maxDevicesPerPlayer` (default
+   `5`) returns `409 VALIDATION` ("device limit reached; revoke one with /nerolink devices and /nerolink revoke"); a pairing lockout returns
+   `429 RATE_LIMITED` with `retryAfterMs: 60000` (see [Rate limits](#rate-limits)).
 
-Tokens expire after `tokenExpiryDays` of inactivity (checked lazily). A client can revoke
-its own token with `DELETE /api/v1/session`.
+Tokens expire after `tokenExpiryDays` (default `90`) of inactivity and after an absolute
+lifetime of 365 days; expired devices are deleted by a sweep at bridge start and every
+6 hours. A client can revoke its own token with `DELETE /api/v1/session`, which also closes
+its live WebSocket and unbinds its relay push registration.
+
+### Direct-mode TLS
+
+On first start the bridge generates a long-lived self-signed **ECDSA P-256** certificate
+and stores it at `config/nerolink/bridge-tls.p12`; it is reused across worlds and restarts.
+Deleting the file rotates it, after which every direct-mode device must re-pair. The client:
+
+1. Connects over TLS and computes the certificate's **SHA-256 fingerprint** (lowercase hex).
+2. Shows the **Security code** — the first 16 hex digits of the fingerprint, formatted
+   `XXXX-XXXX-XXXX-XXXX` — so the player can check it matches the one in chat.
+3. Sends `codeProof = hex(PBKDF2-HMAC-SHA256(password, salt, 100000 iterations, 32 bytes))`
+   where `password` is the pairing code uppercased with dashes removed (UTF-8) and `salt` is
+   `"nerolink-pair-v1:"` followed by the lowercase hex fingerprint.
+4. Pins the fingerprint and refuses any other certificate on later connections.
+
+Because the proof is bound to the certificate the client actually saw, a code relayed
+through an intercepting certificate does not redeem, and PBKDF2 makes cracking a captured
+proof offline take months rather than the code's 5-minute life. The bridge derives each
+code's expected proof once, in the background, when the code is issued. Test vector (shared with the app's
+tests): code `abcd-efgh`, fingerprint
+`ad88909ec2ab31ab99c7980d12d90077c64b434dd55502757adc67155b5a0212` →
+`codeProof` `75dab7f42db2e321281d777d8a5f9a12e734ffade783762763531f3628b1a6c1`.
+
+`tlsEnabled=false` serves plain HTTP, and only when `bindAddress` is `127.0.0.1` — for local
+tooling only; the NeroLink app's direct mode always requires TLS.
 
 ## Routes
 
@@ -91,10 +131,11 @@ All paths are relative to `/api/v1`. **A** = requires auth.
 | --- | --- | :-: | --- |
 | `POST` | `/pair` | — | Redeem a pairing code for a device token. |
 | `GET` | `/privacy/notice` | — | The server's data-processing notice. |
+| `GET` | `/session` | ✓ | Who the calling token belongs to: `{playerUuid, deviceId, deviceName}`. |
 | `DELETE` | `/session` | ✓ | Revoke the calling device's token. |
 | `GET` | `/discovery` | ✓ | API revision, versions, server identity, capability map. |
 | `GET` | `/privacy/export` | ✓ | Everything the bridge holds for you (device metadata + prefs). |
-| `POST` | `/privacy/erase` | ✓ | Fire Core's shared erasure for your data across all mods. |
+| `POST` | `/privacy/erase` | ✓ | Erase your NeroLink data (bridge-scoped). |
 | `GET` | `/prefs/notifications` | ✓ | Your notification category flags. |
 | `PUT` | `/prefs/notifications` | ✓ | Replace your notification category flags. |
 | `GET` | `/wiki` | ✓ | Aggregate in-app wiki index across every module that ships one. |
@@ -104,7 +145,17 @@ All paths are relative to `/api/v1`. **A** = requires auth.
 | `POST` | `/actions/{module}/{action}` | ✓ | Invoke a safe, server-validated action. |
 
 An unknown authed route returns `404 NOT_FOUND`; an unsupported method on
-`/prefs/notifications` returns `405 VALIDATION`.
+`/prefs/notifications` returns `405 VALIDATION`. Every response carries
+`Cache-Control: no-store`.
+
+`GET /api/v1/session` returns:
+
+```json
+{ "ok": true, "data": { "playerUuid": "…", "deviceId": "…", "deviceName": "Pixel 8" } }
+```
+
+The relay calls it with the device's own token to bind push registrations to the real
+player.
 
 ## Discovery
 
@@ -114,11 +165,11 @@ supports:
 ```json
 { "ok": true, "data": {
   "apiRevision": 1,
-  "bridgeVersion": "0.0.1-alpha.1",
-  "coreVersion": "2.0.0",
+  "bridgeVersion": "1.0.0",
+  "coreVersion": "1.14.0",
   "server": { "id": "1a2b3c", "name": "Neroland SMP", "online": true, "players": 3 },
   "modules": [
-    { "id": "core", "version": "2.0.0", "schema": 1,
+    { "id": "core", "version": "1.14.0", "schema": 1,
       "data": ["gates", "alerts", "energy", "storage", "mods", "wiki"], "actions": ["ack_alert"] },
     { "id": "nerospace", "version": null, "schema": 0, "data": [], "actions": [], "absent": true }
   ]
@@ -129,6 +180,8 @@ Every module the app knows about is emitted: present modules carry their `versio
 `schema`, `data` sections and `actions`; modules that aren't installed are emitted with
 `"absent": true` (and `version: null`, `schema: 0`). The `server.id` here is a stable
 per-world hash of the world name — distinct from the relay Server ID used in the base URL.
+`bridgeVersion` and `coreVersion` are read from the loader's metadata for the installed
+jars.
 
 ## Core module sections
 
@@ -183,8 +236,8 @@ mods overview and drive update checks:
   "loader": "neoforge",
   "mcVersion": "26.2",
   "mods": [
-    { "id": "nerolandcore", "name": "Neroland Core", "version": "2.0.0" },
-    { "id": "nerolink", "name": "NeroLink", "version": "0.0.1-alpha.1" },
+    { "id": "nerolandcore", "name": "Neroland Core", "version": "1.14.0" },
+    { "id": "nerolink", "name": "NeroLink", "version": "1.0.0" },
     { "id": "nerologistics", "name": "NeroLogistics", "version": "0.0.1-alpha.1" }
   ]
 } }
@@ -319,7 +372,10 @@ however they like as long as they answer in this shape.
 Connect to `GET /ws/v1` (direct) or `.../s/<serverId>/ws/v1` (relay). **The upgrade is
 Bearer-authenticated**: send `Authorization: Bearer <token>` on the upgrade request — an
 invalid token is rejected with `401 UNAUTHORIZED` before the handshake. One socket is kept
-per device (a new socket for the same token replaces the old one).
+per device (a new socket for the same token replaces the old one; the old
+socket finishing its close no longer drops the new one's subscriptions). `maxClients` (default `64`) caps live connections across direct and relay
+together; past the cap a new socket is closed with `1013` (direct) or `4503` (relay)
+"server busy". Revoking or expiring the device closes its socket immediately.
 
 **Client → server control frames** (JSON text):
 
@@ -329,7 +385,10 @@ per device (a new socket for the same token replaces the old one).
 { "op": "ping" }
 ```
 
-A topic is `moduleId.section` — the same sections as the snapshot endpoints.
+A topic is `moduleId.section` — the same sections as the snapshot endpoints. Topic ids
+that don't look like `module.section` are rejected, and a connection may hold at most
+**32** subscriptions. Control frames (including `ping`) are charged to the device's
+rate limit.
 
 **Server → client frames:**
 
@@ -355,9 +414,13 @@ everyone. Unknown `op` values are ignored for forward-compatibility.
   `privacyNoticeText`.
 - `GET /api/v1/privacy/export` — device metadata (`deviceId`, `deviceName`, `createdAt`,
   `lastSeenAt`, `thisDevice`) and your notification prefs. Token hashes are never included.
-- `POST /api/v1/privacy/erase` — fires Core's shared `PlayerDataErasure` (fanning out
-  across every mod), purges the bridge's own token/prefs/pending-code state, and drops your
-  live sockets. Returns `{ "erased": true, "scope": "bridge" }`.
+- `POST /api/v1/privacy/erase` — the app's "Delete my NeroLink data". **Bridge-scoped:**
+  erases NeroLink's own data (device tokens, prefs, pending pairing code, live sockets,
+  relay push registrations) and does **not** fan out to other mods, so a bearer token on a
+  phone cannot wipe game progress. Returns
+  `{ "erased": true, "scope": "bridge", "note": "…" }`, where the note points at
+  `/neroland data eraseme` (in-game), which runs Core's `PlayerDataErasure` across every
+  Neroland mod, NeroLink included.
 - `GET`/`PUT /api/v1/prefs/notifications` — read/replace your per-category notification
   flags (`{ "notifications": { "nerologistics": true, … } }`). Categories are **opt-in**
   (default off). See [Privacy](Privacy.md).
@@ -371,23 +434,33 @@ Shared error codes and their HTTP statuses:
 | `UNAUTHORIZED` | 401 | Missing/invalid bearer token, or bad pairing code. |
 | `TOKEN_REVOKED` | 401 | Token no longer valid (revoked). |
 | `RATE_LIMITED` | 429 | Rate limit or device cap hit; carries `retryAfterMs`. |
-| `VALIDATION` | 400 (405 on bad method) | Malformed request / missing field. |
+| `VALIDATION` | 400 (405 on bad method) | Malformed request / missing field, or a plain `code` on a direct connection. |
 | `NOT_OWNER` | 403 | The target isn't the caller's own data. |
 | `GATE_LOCKED` | 403 | A required progression gate isn't unlocked. |
 | `ACTION_DISABLED` | 403 | `readOnly` on, or the action is in `actionsDisabled`. |
 | `PLAYER_OFFLINE_REQUIRED` | 409 | The action needs the player online. |
 | `MODULE_ABSENT` | 404 | Module or action not present. |
 | `NOT_FOUND` | 404 | No such route/path. |
-| `INTERNAL` | 500 | Unexpected server error. |
+| `INTERNAL` | 500 (503 on timeout) | Unexpected server error; `503` "server busy; try again" when the server thread doesn't take the request within 10 s. |
 
 Relay-only: `BRIDGE_OFFLINE` (503) and `BRIDGE_TIMEOUT` (504), described above.
 
 ## Rate limits
 
 - **Per-token REST budget:** `rateLimitPerMinute` (default `60`) requests per rolling
-  minute, token-bucket. On breach: `429 RATE_LIMITED` with `retryAfterMs`.
-- **Client cap:** `maxClients` (default `64`) — enforced at pairing as a per-player device
-  limit; a new pairing past the cap returns `429 RATE_LIMITED` ("device limit reached").
+  minute, token-bucket. On breach: `429 RATE_LIMITED` with `retryAfterMs`. WebSocket
+  control frames count against the same budget.
+- **Devices per player:** `maxDevicesPerPlayer` (default `5`); a new pairing past the cap
+  returns `409 VALIDATION` ("device limit reached; revoke one with /nerolink devices and /nerolink revoke").
+- **Live connections:** `maxClients` (default `64`) concurrent WebSockets, direct + relay.
+- **Pairing brute force:** failed redemptions are budgeted at **5 per source per minute**
+  (the client IP on direct connections; on relay connections a salted, daily-rotating hash
+  of the client IP forwarded by the relay), with a **120 per minute global** backstop.
+  Attempts are refused with `429 RATE_LIMITED` (`retryAfterMs: 60000`) only while a budget
+  is exceeded; pending codes are never voided.
+- **Transport limits (direct):** request bodies are capped at 16 KiB; 16 concurrent TCP
+  connections per address; connections idle for 90 s are closed; JSON nested deeper than
+  32 levels is rejected before parsing.
 
 ## See also
 

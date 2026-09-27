@@ -48,6 +48,11 @@ public final class WebSocketHub {
         }
     }
 
+    /** Upper bound on topics one connection may subscribe to (each costs a server-thread snapshot). */
+    static final int MAX_TOPICS_PER_CONNECTION = 32;
+    /** Topic ids are {@code module.section}; anything longer or odd is ignored. */
+    private static final java.util.regex.Pattern TOPIC = java.util.regex.Pattern.compile("[a-z0-9_-]{1,32}\\.[a-z0-9_-]{1,48}");
+
     /** connectionId -> subscriber. One connection per token (device). */
     private final Map<String, Subscriber> subscribers = new ConcurrentHashMap<>();
     private volatile MinecraftServer server;
@@ -65,18 +70,47 @@ public final class WebSocketHub {
         flusher.scheduleAtFixedRate(this::pingAll, 30, 30, java.util.concurrent.TimeUnit.SECONDS);
     }
 
-    /** Register a freshly upgraded socket (enforces one connection per device). */
-    public void register(WsConnection connection) {
+    /**
+     * Register a freshly upgraded socket, enforcing one connection per device and the global
+     * {@code maxClients} cap. A device reconnecting replaces its own older socket and never
+     * counts against the cap twice.
+     *
+     * @return false when the server is at capacity (caller must close the socket)
+     */
+    public synchronized boolean register(WsConnection connection) {
+        boolean replacing = subscribers.containsKey(connection.connectionId());
+        if (!replacing && subscribers.size() >= za.co.neroland.nerolink.config.NeroLinkConfig.MAX_CLIENTS.get()) {
+            return false;
+        }
         Subscriber previous = subscribers.put(connection.connectionId(), new Subscriber(connection));
-        if (previous != null) {
+        if (previous != null && previous.connection != connection) {
             // One WS per token: drop the older connection.
             previous.connection.close();
         }
+        return true;
     }
 
-    /** Drop a closed socket. */
-    public void unregister(String connectionId) {
-        subscribers.remove(connectionId);
+    /**
+     * Drop a closed socket — only if it is still the registered one. A reconnect registers the
+     * new socket under the same device id before the old one finishes closing; removing by id
+     * alone would silently drop the new subscription.
+     */
+    public void unregister(WsConnection connection) {
+        subscribers.computeIfPresent(connection.connectionId(),
+                (id, sub) -> sub.connection == connection ? null : sub);
+    }
+
+    /** Close and drop one device's socket (revoke / expiry / unpair). */
+    public void disconnectDevice(String deviceId) {
+        Subscriber sub = subscribers.remove(deviceId);
+        if (sub != null) {
+            sub.connection.close();
+        }
+    }
+
+    /** Number of live connections (status output). */
+    public int connectionCount() {
+        return subscribers.size();
     }
 
     /**
@@ -89,21 +123,34 @@ public final class WebSocketHub {
         if (sub == null || frame == null || !frame.has("op")) {
             return;
         }
+        if (!frame.get("op").isJsonPrimitive()) {
+            return;
+        }
         String op = frame.get("op").getAsString();
         switch (op) {
             case "sub" -> {
                 if (frame.has("topics") && frame.get("topics").isJsonArray()) {
-                    frame.getAsJsonArray("topics").forEach(t -> {
+                    for (var t : frame.getAsJsonArray("topics")) {
+                        if (!t.isJsonPrimitive()) {
+                            continue;
+                        }
                         String topic = t.getAsString();
+                        if (!TOPIC.matcher(topic).matches() || sub.topics.size() >= MAX_TOPICS_PER_CONNECTION) {
+                            continue;
+                        }
                         if (sub.topics.add(topic)) {
                             sendSnapshot(sub, topic);
                         }
-                    });
+                    }
                 }
             }
             case "unsub" -> {
                 if (frame.has("topics") && frame.get("topics").isJsonArray()) {
-                    frame.getAsJsonArray("topics").forEach(t -> sub.topics.remove(t.getAsString()));
+                    frame.getAsJsonArray("topics").forEach(t -> {
+                        if (t.isJsonPrimitive()) {
+                            sub.topics.remove(t.getAsString());
+                        }
+                    });
                 }
             }
             case "ping" -> sub.connection.send("{\"op\":\"pong\"}");
@@ -123,7 +170,13 @@ public final class WebSocketHub {
             if (!event.isBroadcast() && !sub.connection.player().equals(event.playerId())) {
                 continue;
             }
-            sub.pending.computeIfAbsent(topic, k -> new JsonArray()).add(delta);
+            // compute() is atomic per key, and flush() removes a topic's array before serialising
+            // it, so an event is either in the batch being sent or starts the next one - never lost.
+            sub.pending.compute(topic, (k, batch) -> {
+                JsonArray arr = batch == null ? new JsonArray() : batch;
+                arr.add(delta);
+                return arr;
+            });
         }
     }
 
@@ -164,14 +217,15 @@ public final class WebSocketHub {
             if (sub.pending.isEmpty()) {
                 continue;
             }
-            var it = sub.pending.entrySet().iterator();
-            while (it.hasNext()) {
-                var entry = it.next();
-                it.remove();
+            for (String topic : java.util.List.copyOf(sub.pending.keySet())) {
+                JsonArray batch = sub.pending.remove(topic);
+                if (batch == null) {
+                    continue;
+                }
                 JsonObject frame = new JsonObject();
-                frame.addProperty("topic", entry.getKey());
+                frame.addProperty("topic", topic);
                 frame.addProperty("t", now);
-                frame.add("delta", entry.getValue());
+                frame.add("delta", batch);
                 try {
                     sub.connection.send(Json.toString(frame));
                 } catch (Exception e) {

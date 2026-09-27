@@ -15,6 +15,8 @@ import com.google.gson.JsonObject;
 public final class RequestDedup {
 
     private static final long TTL_MILLIS = 10 * 60 * 1000L;
+    /** Client request ids are UUIDs; anything longer is not cached (bounds memory per entry). */
+    static final int MAX_REQUEST_ID_LENGTH = 64;
 
     private record Cached(JsonObject envelope, long expiresAt) {
     }
@@ -23,7 +25,7 @@ public final class RequestDedup {
 
     /** The previously cached response envelope for this player+requestId, if still fresh. */
     public Optional<JsonObject> lookup(java.util.UUID player, String requestId) {
-        if (requestId == null || requestId.isBlank()) {
+        if (requestId == null || requestId.isBlank() || requestId.length() > MAX_REQUEST_ID_LENGTH) {
             return Optional.empty();
         }
         purgeExpired();
@@ -36,10 +38,15 @@ public final class RequestDedup {
 
     /** Remember a response envelope for this player+requestId. No-op if requestId is absent. */
     public void remember(java.util.UUID player, String requestId, JsonObject envelope) {
-        if (requestId == null || requestId.isBlank()) {
+        if (requestId == null || requestId.isBlank() || requestId.length() > MAX_REQUEST_ID_LENGTH) {
             return;
         }
         cache.put(key(player, requestId), new Cached(envelope, System.currentTimeMillis() + TTL_MILLIS));
+    }
+
+    /** Drop expired entries (housekeeping; also bounds memory). */
+    public void prune() {
+        purgeExpired();
     }
 
     private static String key(java.util.UUID player, String requestId) {

@@ -5,11 +5,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -37,11 +37,30 @@ import za.co.neroland.nerolink.NeroLinkCommon;
  * <p>Persistence mirrors Core's {@code LinkAlerts}/{@code ProgressionState} pattern exactly
  * ({@link SavedDataType} + Codec on the overworld data storage), keeping all storage in the
  * loader-neutral common module.
+ *
+ * <p><b>Threading.</b> Authentication runs on Netty I/O threads and the relay thread while the
+ * game thread saves the world, so the device table is a {@link ConcurrentHashMap} (weakly
+ * consistent iteration — no {@code ConcurrentModificationException} during autosave) and every
+ * mutation is {@code synchronized}. The bridge resolves the instance once on the server thread
+ * at start ({@link #get(MinecraftServer)} touches the level's data storage, which is not
+ * thread-safe) and hands that reference to the I/O layer.
+ *
+ * <p><b>Retention.</b> Devices expire after {@code tokenExpiryDays} of inactivity and have an
+ * absolute lifetime cap; {@link #sweepExpired} runs at bridge start and periodically, so
+ * abandoned devices are deleted even if they never call again.
  */
 public final class TokenStore extends SavedData {
 
     /** 32 random bytes, base64url — the opaque token handed to the client once. */
     public static final int TOKEN_BYTES = 32;
+
+    /** Absolute maximum token lifetime regardless of activity (re-pair once a year). */
+    public static final long MAX_LIFETIME_MILLIS = 365L * 24 * 60 * 60 * 1000;
+
+    /** lastSeenAt is only persisted when it moves by at least this much (avoids a dirty save per request). */
+    private static final long LAST_SEEN_GRANULARITY_MILLIS = 60_000L;
+
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
 
     public static final Identifier ID = Identifier.fromNamespaceAndPath(NeroLinkCommon.MOD_ID, "tokens");
 
@@ -49,7 +68,7 @@ public final class TokenStore extends SavedData {
             new SavedDataType<>(ID, TokenStore::new, codec(), null);
 
     /** deviceId -> device row. */
-    private final Map<String, Device> byDevice = new LinkedHashMap<>();
+    private final Map<String, Device> byDevice = new ConcurrentHashMap<>();
 
     public TokenStore() {
     }
@@ -71,9 +90,9 @@ public final class TokenStore extends SavedData {
      * Create a new device pairing for a player. Generates a random opaque token, stores only
      * its hash, and returns the plaintext token exactly once (for the client to persist).
      */
-    public Issued issue(MinecraftServer server, UUID player, String deviceName) {
+    public synchronized Issued issue(MinecraftServer server, UUID player, String deviceName) {
         byte[] raw = new byte[TOKEN_BYTES];
-        new java.security.SecureRandom().nextBytes(raw);
+        RANDOM.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
         String deviceId = UUID.randomUUID().toString();
         long now = System.currentTimeMillis();
@@ -88,7 +107,7 @@ public final class TokenStore extends SavedData {
      * Resolve a bearer token to its (non-expired) device, bumping {@code lastSeenAt}.
      * Returns empty if unknown, revoked or expired past the inactivity window.
      */
-    public Optional<Device> authenticate(MinecraftServer server, String token, long expiryMillis) {
+    public synchronized Optional<Device> authenticate(MinecraftServer server, String token, long expiryMillis) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
@@ -96,11 +115,13 @@ public final class TokenStore extends SavedData {
         for (Device d : byDevice.values()) {
             if (constantTimeEquals(d.tokenHash(), hash)) {
                 long now = System.currentTimeMillis();
-                if (expiryMillis > 0 && now - d.lastSeenAt() > expiryMillis) {
-                    // Lazy inactivity expiry: drop the stale device and reject.
-                    byDevice.remove(d.deviceId());
-                    setDirty();
+                if (isExpired(d, now, expiryMillis)) {
+                    // Reject only; the retention sweep deletes it (and closes its socket and
+                    // unbinds its relay push), so nothing about the device is left behind.
                     return Optional.empty();
+                }
+                if (now - d.lastSeenAt() < LAST_SEEN_GRANULARITY_MILLIS) {
+                    return Optional.of(d);
                 }
                 Device bumped = new Device(d.deviceId(), d.tokenHash(), d.player(),
                         d.deviceName(), d.createdAt(), now);
@@ -110,6 +131,43 @@ public final class TokenStore extends SavedData {
             }
         }
         return Optional.empty();
+    }
+
+    private static boolean isExpired(Device d, long now, long expiryMillis) {
+        if (expiryMillis > 0 && now - d.lastSeenAt() > expiryMillis) {
+            return true;
+        }
+        return now - d.createdAt() > MAX_LIFETIME_MILLIS;
+    }
+
+    /**
+     * Retention sweep: delete every device past its inactivity window or absolute lifetime.
+     *
+     * @return the removed devices (so callers can close their sockets / unbind push)
+     */
+    public synchronized List<Device> sweepExpired(long expiryMillis) {
+        long now = System.currentTimeMillis();
+        List<Device> removed = new ArrayList<>();
+        for (Device d : byDevice.values()) {
+            if (isExpired(d, now, expiryMillis)) {
+                removed.add(d);
+            }
+        }
+        removed.forEach(d -> byDevice.remove(d.deviceId()));
+        if (!removed.isEmpty()) {
+            setDirty();
+        }
+        return removed;
+    }
+
+    /** Total paired devices across all players (op status; no personal data). */
+    public int deviceCount() {
+        return byDevice.size();
+    }
+
+    /** Look up a device row by id. */
+    public Optional<Device> device(String deviceId) {
+        return Optional.ofNullable(byDevice.get(deviceId));
     }
 
     /** Devices belonging to a player, most-recently-seen first (metadata only). */
@@ -125,7 +183,7 @@ public final class TokenStore extends SavedData {
     }
 
     /** Revoke by device id. @return true if it existed. */
-    public boolean revoke(String deviceId) {
+    public synchronized boolean revoke(String deviceId) {
         if (byDevice.remove(deviceId) != null) {
             setDirty();
             return true;
@@ -134,7 +192,7 @@ public final class TokenStore extends SavedData {
     }
 
     /** Revoke by the presented bearer token (used by DELETE /session). @return true if matched. */
-    public boolean revokeByToken(String token) {
+    public synchronized boolean revokeByToken(String token) {
         if (token == null) {
             return false;
         }
@@ -150,7 +208,7 @@ public final class TokenStore extends SavedData {
     }
 
     /** POPIA/GDPR erasure: remove every device for a player. */
-    public void forget(UUID player) {
+    public synchronized void forget(UUID player) {
         boolean changed = byDevice.values().removeIf(d -> d.player().equals(player));
         if (changed) {
             setDirty();
@@ -215,6 +273,7 @@ public final class TokenStore extends SavedData {
     private List<Row> rows() {
         List<Row> out = new ArrayList<>();
         byDevice.values().forEach(d -> out.add(Row.of(d)));
+        out.sort((a, b) -> Long.compare(a.createdAt(), b.createdAt()));
         return out;
     }
 

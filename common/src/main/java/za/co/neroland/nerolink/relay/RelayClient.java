@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+
+import net.minecraft.server.MinecraftServer;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
@@ -105,6 +106,12 @@ public final class RelayClient {
 
     private NioEventLoopGroup group;
     private volatile Channel channel;
+    /**
+     * Connection generation. Bumped on every start, so callbacks from a channel belonging to an
+     * earlier start (e.g. the old tunnel still closing during {@link #restart}) are ignored
+     * instead of tearing down — and endlessly re-dialling — the current one.
+     */
+    private volatile long epoch;
     private volatile long backoffMs = INITIAL_BACKOFF_MS;
     private volatile ScheduledFuture<?> pingTask;
 
@@ -161,6 +168,7 @@ public final class RelayClient {
         }
 
         this.group = new NioEventLoopGroup(1, daemonThreads("nerolink-relay"));
+        this.epoch++;
         this.running = true;
         this.state = State.CONNECTING;
         this.backoffMs = INITIAL_BACKOFF_MS;
@@ -220,6 +228,7 @@ public final class RelayClient {
         if (!running) {
             return;
         }
+        final long myEpoch = epoch;
         Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(group)
                 .channel(NioSocketChannel.class)
@@ -236,14 +245,22 @@ public final class RelayClient {
                                 .addLast(new HttpClientCodec())
                                 .addLast(new HttpObjectAggregator(MAX_HTTP_BYTES))
                                 .addLast(new WebSocketClientProtocolHandler(handshaker))
-                                .addLast(new RelayInboundHandler());
+                                .addLast(new RelayInboundHandler(myEpoch));
                     }
                 });
 
         bootstrap.connect(host, port).addListener((ChannelFuture future) -> {
+            if (myEpoch != epoch || !running) {
+                // Stopped or restarted while dialling: this connection is stale.
+                if (future.isSuccess()) {
+                    future.channel().close();
+                }
+                return;
+            }
             if (future.isSuccess()) {
-                channel = future.channel();
-                channel.closeFuture().addListener(closed -> onDisconnected());
+                Channel ch = future.channel();
+                channel = ch;
+                ch.closeFuture().addListener(closed -> onDisconnected(ch, myEpoch));
             } else {
                 NeroLinkCommon.LOGGER.debug("[NeroLink] relay TCP connect to host {} failed", host, future.cause());
                 scheduleReconnect();
@@ -264,9 +281,13 @@ public final class RelayClient {
         backoffMs = INITIAL_BACKOFF_MS;
         startPing();
         NeroLinkCommon.LOGGER.info("[NeroLink] relay tunnel connected (host {}).", host);
+        flushPendingErasures();
     }
 
-    private void onDisconnected() {
+    private void onDisconnected(Channel ch, long connEpoch) {
+        if (connEpoch != epoch || channel != ch) {
+            return; // a superseded connection finished closing; the current one is unaffected
+        }
         stopPing();
         channel = null;
         dropAllConnections();
@@ -283,8 +304,13 @@ public final class RelayClient {
         long delay = backoffMs;
         backoffMs = Math.min(MAX_BACKOFF_MS, backoffMs * 2);
         NeroLinkCommon.LOGGER.debug("[NeroLink] relay reconnecting to host {} in {} ms", host, delay);
+        final long myEpoch = epoch;
         try {
-            group.schedule(this::connect, delay, TimeUnit.MILLISECONDS);
+            group.schedule(() -> {
+                if (myEpoch == epoch) {
+                    connect();
+                }
+            }, delay, TimeUnit.MILLISECONDS);
         } catch (Exception ignored) {
             // group shutting down; nothing to do
         }
@@ -313,7 +339,7 @@ public final class RelayClient {
 
     private void dropAllConnections() {
         for (RelayWsConnection conn : connections.values()) {
-            bridge.wsHub().unregister(conn.connectionId());
+            bridge.wsHub().unregister(conn);
         }
         connections.clear();
     }
@@ -322,10 +348,16 @@ public final class RelayClient {
 
     /** Send a raw JSON text frame to the relay. Safe to call from any thread. */
     public void send(String frame) {
+        sendTracked(frame);
+    }
+
+    /** Like {@link #send} but returns the write future (null when the tunnel is down). */
+    private ChannelFuture sendTracked(String frame) {
         Channel ch = channel;
         if (ch != null && ch.isActive() && state == State.CONNECTED) {
-            ch.writeAndFlush(new TextWebSocketFrame(frame));
+            return ch.writeAndFlush(new TextWebSocketFrame(frame));
         }
+        return null;
     }
 
     /** Forward a hub frame to a relay-backed client: {@code {t:"ws_msg", cid, data}}. */
@@ -358,29 +390,65 @@ public final class RelayClient {
     }
 
     /**
-     * Emit a POPIA/GDPR tombstone so the relay drops this player's push tokens. Called from the
-     * bridge's {@code PlayerDataErasure} hook. No-op when the tunnel is down. The uuid is never logged.
+     * Send every queued POPIA/GDPR relay instruction (player erasure tombstones and device push
+     * unbinds). They are persisted in {@link RelaySettings} first, so an erasure made while the
+     * tunnel is down still reaches the relay when it reconnects. Entries are dropped from the
+     * queue only once written to a connected tunnel. Player UUIDs are never logged.
      */
-    public void sendErase(UUID playerUuid) {
-        if (!isConnected() || playerUuid == null) {
+    public void flushPendingErasures() {
+        if (!isConnected()) {
             return;
         }
-        JsonObject frame = new JsonObject();
-        frame.addProperty("t", "erase");
-        frame.addProperty("playerUuid", playerUuid.toString());
-        send(Json.toString(frame));
+        MinecraftServer server = bridge.server();
+        server.execute(() -> {
+            if (!isConnected()) {
+                return;
+            }
+            RelaySettings settings = RelaySettings.get(server);
+            for (String entry : settings.pendingRelayOps()) {
+                JsonObject frame = RelaySettings.opFrame(entry);
+                if (frame == null) {
+                    settings.removeRelayOp(entry); // malformed: drop
+                    continue;
+                }
+                ChannelFuture write = sendTracked(Json.toString(frame));
+                if (write == null) {
+                    return; // tunnel went down: keep the rest queued for the next connect
+                }
+                // Dequeue only once the frame is actually on the wire; a failed write stays queued.
+                write.addListener(f -> {
+                    if (f.isSuccess()) {
+                        server.execute(() -> RelaySettings.get(server).removeRelayOp(entry));
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * Unbind one device's push registration on the relay (device revoked, expired or unpaired).
+     * Queued and flushed like erasures so it survives the tunnel being down.
+     */
+    public void sendPushUnbind(UUID playerUuid, String deviceId) {
+        if (playerUuid == null || deviceId == null) {
+            return;
+        }
+        MinecraftServer server = bridge.server();
+        server.execute(() -> {
+            RelaySettings settings = RelaySettings.get(server);
+            if (NeroLinkBridge.resolveRelayCredentials(server) == null) {
+                return; // no relay in use: nothing was ever registered there
+            }
+            settings.queueUnbind(playerUuid, deviceId);
+            flushPendingErasures();
+        });
     }
 
     // --- inbound frame handling ------------------------------------------------------
 
     private void onFrame(String raw) {
-        JsonObject frame;
-        try {
-            frame = JsonParser.parseString(raw).getAsJsonObject();
-        } catch (Exception e) {
-            return; // garbage frame; ignore defensively
-        }
-        if (frame == null || !frame.has("t") || frame.get("t").isJsonNull()) {
+        JsonObject frame = Json.parseObject(raw); // null on garbage / hostile nesting; never throws
+        if (frame == null || !frame.has("t") || !frame.get("t").isJsonPrimitive()) {
             return;
         }
         switch (frame.get("t").getAsString()) {
@@ -422,8 +490,14 @@ public final class RelayClient {
         });
         JsonObject body = parseBody(bodyRaw);
         String bearer = bearerFrom(auth);
+        // The relay forwards a salted hash of the caller's IP (never the IP itself) so public routes
+        // like /pair can be budgeted per client rather than across every relay user at once.
+        String clientKey = optString(frame, "ip");
+        String source = clientKey == null || clientKey.isBlank() ? "relay"
+                : "relay:" + clientKey.substring(0, Math.min(clientKey.length(), 64));
 
-        ApiRequest request = new ApiRequest(method, segments, query, body, bearer);
+        ApiRequest request = new ApiRequest(method, segments, query, body, bearer,
+                ApiRequest.Transport.RELAY, source);
         bridge.dispatcher().handle(request).whenComplete((response, error) -> {
             ApiResponse resp = error != null
                     ? ApiResponse.error(500, ApiErrors.INTERNAL, "internal error")
@@ -455,8 +529,11 @@ public final class RelayClient {
         TokenStore.Device device = auth.get();
         RelayWsConnection conn = new RelayWsConnection(this, cid, device.player(), device.deviceId());
         connections.put(cid, conn);
-        // Registering enforces the one-WS-per-token rule for relay clients too (replaces any prior).
-        bridge.wsHub().register(conn);
+        // Registering enforces the one-WS-per-token rule for relay clients too (replaces any prior)
+        // and the global maxClients cap.
+        if (!bridge.wsHub().register(conn)) {
+            closeVirtual(cid, 4503, "server busy");
+        }
     }
 
     private void onWsMsg(JsonObject frame) {
@@ -469,11 +546,12 @@ public final class RelayClient {
         if (conn == null) {
             return;
         }
-        try {
-            JsonObject control = JsonParser.parseString(data).getAsJsonObject();
+        if (!bridge.rateLimiter().check(conn.connectionId()).allowed()) {
+            return;
+        }
+        JsonObject control = Json.parseObject(data);
+        if (control != null) {
             bridge.wsHub().onControlFrame(conn.connectionId(), control);
-        } catch (Exception e) {
-            NeroLinkCommon.LOGGER.debug("[NeroLink] bad relay ws control frame", e);
         }
     }
 
@@ -484,7 +562,7 @@ public final class RelayClient {
         }
         RelayWsConnection conn = connections.remove(cid);
         if (conn != null) {
-            bridge.wsHub().unregister(conn.connectionId());
+            bridge.wsHub().unregister(conn);
         }
     }
 
@@ -528,15 +606,31 @@ public final class RelayClient {
     // --- Netty inbound handler -------------------------------------------------------
 
     private final class RelayInboundHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
+        private final long connEpoch;
+
+        RelayInboundHandler(long connEpoch) {
+            this.connEpoch = connEpoch;
+        }
+
+        private boolean current(ChannelHandlerContext ctx) {
+            return connEpoch == epoch && ctx.channel() == channel;
+        }
+
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame frame) {
-            onFrame(frame.text());
+            if (current(ctx)) {
+                onFrame(frame.text());
+            }
         }
 
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
             if (evt == WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE) {
-                onHandshakeComplete();
+                if (current(ctx)) {
+                    onHandshakeComplete();
+                } else {
+                    ctx.close();
+                }
             }
             super.userEventTriggered(ctx, evt);
         }
@@ -562,11 +656,7 @@ public final class RelayClient {
         if (raw == null || raw.isBlank()) {
             return null;
         }
-        try {
-            return JsonParser.parseString(raw).getAsJsonObject();
-        } catch (Exception e) {
-            return null;
-        }
+        return Json.parseObject(raw);
     }
 
     private static List<String> splitSegments(String path) {
@@ -580,7 +670,7 @@ public final class RelayClient {
     }
 
     private static String optString(JsonObject obj, String key) {
-        return obj.has(key) && !obj.get(key).isJsonNull() ? obj.get(key).getAsString() : null;
+        return obj.has(key) && obj.get(key).isJsonPrimitive() ? obj.get(key).getAsString() : null;
     }
 
     private static ThreadFactory daemonThreads(String prefix) {

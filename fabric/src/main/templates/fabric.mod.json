@@ -3,7 +3,10 @@
   "id": "${mod_id}",
   "version": "${mod_version}",
   "name": "${mod_name}",
-  "description": "NeroLink - multiloader build (Fabric).",
+  "description": "Server-side bridge for the NeroLink companion app: pair your phone in-game and see your Neroland base live - energy, quests, progression and more - over a pinned TLS connection or the NeroLink relay. Requires Neroland Core.",
+  "contact": {
+    "homepage": "https://neroland.co.za"
+  },
   "authors": ["${mod_authors}"],
   "license": "${mod_license}",
   "icon": "nerolink_logo.png",
@@ -22,6 +25,6 @@
     "minecraft": ">=${minecraft_version}",
     "java": ">=25",
     "fabric-api": "*",
-    "nerolandcore": ">=${nerolandcore_version}"
+    "nerolandcore": ">=${nerolandcore_version} <2.0.0"
   }
 }

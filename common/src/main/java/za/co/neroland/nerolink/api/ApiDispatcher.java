@@ -47,6 +47,11 @@ public final class ApiDispatcher {
             "neroruins", "nerocolonies", "neroevents", "nerodecor", "neroquests",
             "nerosecurity", "nerocreatures", "neroagriculture", "neropower", "nerocompanion");
 
+    /** Max seconds a request waits for the server thread before answering 503. */
+    static final long SERVER_THREAD_TIMEOUT_SECONDS = 10;
+    /** Max notification-preference categories stored per player. */
+    static final int MAX_PREF_KEYS = 64;
+
     private final NeroLinkBridge bridge;
 
     public ApiDispatcher(NeroLinkBridge bridge) {
@@ -64,8 +69,9 @@ public final class ApiDispatcher {
             String method = req.method();
 
             // --- public routes -------------------------------------------------------
+            // Public: POST /pair (budgeted, see PairingService) and GET /privacy/notice.
             if (method.equals("POST") && matches(seg, "pair")) {
-                return completed(handlePair(req));
+                return handlePair(req);
             }
             if (method.equals("GET") && matches(seg, "privacy", "notice")) {
                 JsonObject data = new JsonObject();
@@ -90,10 +96,23 @@ public final class ApiDispatcher {
 
             // --- authed routes -------------------------------------------------------
             if (method.equals("DELETE") && matches(seg, "session")) {
-                bridge.tokens().revoke(device.deviceId());
-                bridge.rateLimiter().forget(device.deviceId());
+                // On the server thread, like every other token-store write that must not be lost
+                // to a concurrent save.
+                return onServerThread(() -> {
+                    bridge.tokens().revoke(device.deviceId());
+                    bridge.onDeviceRemoved(device);
+                    JsonObject data = new JsonObject();
+                    data.addProperty("revoked", true);
+                    return ApiResponse.ok(data);
+                });
+            }
+            if (method.equals("GET") && matches(seg, "session")) {
+                // Who this token is. Used by the relay to bind push registrations to the real
+                // player/device instead of trusting client-supplied ids.
                 JsonObject data = new JsonObject();
-                data.addProperty("revoked", true);
+                data.addProperty("playerUuid", player.toString());
+                data.addProperty("deviceId", device.deviceId());
+                data.addProperty("deviceName", device.deviceName());
                 return completed(ApiResponse.ok(data));
             }
             if (method.equals("GET") && matches(seg, "discovery")) {
@@ -136,8 +155,9 @@ public final class ApiDispatcher {
             }
 
             return completed(ApiResponse.notFound("no such route"));
-        } catch (Exception e) {
-            NeroLinkCommon.LOGGER.warn("[NeroLink] request handling error", e);
+        } catch (RuntimeException e) {
+            // Log the type only: messages can echo client input.
+            NeroLinkCommon.LOGGER.warn("[NeroLink] request handling error: {}", e.getClass().getName());
             return completed(ApiResponse.error(500, ApiErrors.INTERNAL, "internal error"));
         }
     }
@@ -148,8 +168,8 @@ public final class ApiDispatcher {
         MinecraftServer server = bridge.server();
         JsonObject data = new JsonObject();
         data.addProperty("apiRevision", 1);
-        data.addProperty("bridgeVersion", NeroLinkCommon.BRIDGE_VERSION);
-        data.addProperty("coreVersion", CoreModule.CORE_VERSION);
+        data.addProperty("bridgeVersion", NeroLinkCommon.bridgeVersion());
+        data.addProperty("coreVersion", CoreModule.coreVersion());
 
         JsonObject serverObj = new JsonObject();
         serverObj.addProperty("id", serverId(server));
@@ -220,7 +240,7 @@ public final class ApiDispatcher {
                 JsonObject snap = provider.get().snapshot(player, section, query);
                 return ApiResponse.ok(snap == null ? new JsonObject() : snap);
             } catch (Exception e) {
-                NeroLinkCommon.LOGGER.warn("[NeroLink] snapshot error for {}/{}", moduleId, section, e);
+                NeroLinkCommon.LOGGER.warn("[NeroLink] snapshot error for {}/{}", safe(moduleId), safe(section), e);
                 return ApiResponse.error(500, ApiErrors.INTERNAL, "snapshot failed");
             }
         });
@@ -250,7 +270,7 @@ public final class ApiDispatcher {
         }
 
         JsonObject params = body == null ? new JsonObject() : body;
-        String requestId = params.has("requestId") && !params.get("requestId").isJsonNull()
+        String requestId = params.has("requestId") && params.get("requestId").isJsonPrimitive()
                 ? params.get("requestId").getAsString() : null;
 
         // Idempotency: replay a cached response for a repeated requestId.
@@ -272,7 +292,7 @@ public final class ApiDispatcher {
             try {
                 result = handler.execute(player, actionId, params);
             } catch (Exception e) {
-                NeroLinkCommon.LOGGER.warn("[NeroLink] action error for {}/{}", moduleId, actionId, e);
+                NeroLinkCommon.LOGGER.warn("[NeroLink] action error for {}/{}", safe(moduleId), safe(actionId), e);
                 return ApiResponse.error(500, ApiErrors.INTERNAL, "action failed");
             }
             ApiResponse response = toResponse(result);
@@ -335,18 +355,19 @@ public final class ApiDispatcher {
         return ApiResponse.ok(data);
     }
 
+    /**
+     * In-app "Delete my data": purges everything <i>NeroLink</i> holds for this player (devices,
+     * prefs, pairing codes, sockets, relay push registrations). It deliberately does not fan out
+     * to every Neroland mod: a bearer token on a phone should not be able to wipe a player's game
+     * progress. Full erasure across all mods stays an in-game action ({@code /neroland data eraseme}).
+     */
     private ApiResponse privacyErase(UUID player) {
-        MinecraftServer server = bridge.server();
-        // Fire Core's shared erasure (fans out across all mods) + purge bridge-local state.
-        za.co.neroland.nerolandcore.data.PlayerDataErasure.erase(server, player);
-        // Belt and braces: also purge our own stores + live services now.
-        bridge.tokens().forget(player);
-        PrefsStore.get(server).forget(player);
-        bridge.pairing().forget(player);
-        bridge.wsHub().disconnectPlayer(player);
+        NeroLinkCommon.eraseBridgeData(bridge.server(), player);
         JsonObject data = new JsonObject();
         data.addProperty("erased", true);
         data.addProperty("scope", "bridge");
+        data.addProperty("note", "NeroLink data erased. To erase your data from every Neroland mod on this "
+                + "server, run /neroland data eraseme in-game.");
         return ApiResponse.ok(data);
     }
 
@@ -369,6 +390,9 @@ public final class ApiDispatcher {
         Map<String, Boolean> map = new java.util.LinkedHashMap<>();
         for (String key : categories.keySet()) {
             var el = categories.get(key);
+            if (map.size() >= MAX_PREF_KEYS || key.length() > 64) {
+                continue;
+            }
             if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isBoolean()) {
                 map.put(key, el.getAsBoolean());
             }
@@ -379,45 +403,85 @@ public final class ApiDispatcher {
 
     // --- pairing (public) ------------------------------------------------------------
 
-    private ApiResponse handlePair(ApiRequest req) {
+    /**
+     * {@code POST /pair}. Over the relay the body carries the plain {@code code}. Over the direct
+     * TLS listener the client must instead send {@code codeProof} — an HMAC of the code over the
+     * certificate fingerprint it saw (see {@link za.co.neroland.nerolink.tls.BridgeTls}) — so a
+     * machine-in-the-middle with a different certificate cannot pair. Failed attempts are budgeted
+     * per source and globally (see {@link za.co.neroland.nerolink.auth.PairingService}).
+     */
+    private CompletableFuture<ApiResponse> handlePair(ApiRequest req) {
         JsonObject body = req.body();
-        if (body == null || !body.has("code")) {
-            return ApiResponse.validation("code required");
+        if (body == null) {
+            return completed(ApiResponse.validation("JSON body required"));
         }
-        // Global concurrent-client cap.
-        int maxClients = NeroLinkConfig.MAX_CLIENTS.get();
-        // (Approximate: count of distinct paired devices is the client population.)
-        String code = body.get("code").getAsString();
-        String deviceName = body.has("deviceName") && !body.get("deviceName").isJsonNull()
-                ? body.get("deviceName").getAsString() : "device";
-
-        Optional<UUID> playerOpt = bridge.pairing().redeem(code);
-        if (playerOpt.isEmpty()) {
-            return ApiResponse.error(401, ApiErrors.UNAUTHORIZED, "invalid or expired pairing code");
+        String deviceName = optString(body, "deviceName");
+        if (body.has("deviceName") && !body.get("deviceName").isJsonNull() && deviceName == null) {
+            return completed(ApiResponse.validation("deviceName must be a string"));
         }
-        UUID player = playerOpt.get();
 
-        // Pairing mutates the token store (game state) — do it on the server thread and block briefly.
+        za.co.neroland.nerolink.auth.PairingService.Redemption redemption;
+        if (req.transport() == ApiRequest.Transport.DIRECT_TLS) {
+            String proof = optString(body, "codeProof");
+            if (proof == null) {
+                return completed(ApiResponse.validation(
+                        "codeProof required on direct connections (update the NeroLink app)"));
+            }
+            redemption = bridge.pairing().redeemProof(proof, req.source());
+        } else {
+            String code = optString(body, "code");
+            if (code == null) {
+                return completed(ApiResponse.validation("code required"));
+            }
+            redemption = bridge.pairing().redeem(code, req.source());
+        }
+        switch (redemption.outcome()) {
+            case LOCKED -> {
+                return completed(ApiResponse.error(429, ApiErrors.RATE_LIMITED,
+                        "too many failed pairing attempts; run /nerolink pair again in a minute", 60_000L));
+            }
+            case INVALID -> {
+                return completed(ApiResponse.error(401, ApiErrors.UNAUTHORIZED, "invalid or expired pairing code"));
+            }
+            case OK -> { }
+        }
+        UUID player = redemption.player();
+        int maxDevices = NeroLinkConfig.MAX_DEVICES_PER_PLAYER.get();
         MinecraftServer server = bridge.server();
-        try {
-            return onServerThread(() -> {
-                if (bridge.tokens().devicesOf(player).size() >= maxClients) {
-                    return ApiResponse.error(429, ApiErrors.RATE_LIMITED, "device limit reached");
-                }
-                TokenStore.Issued issued = bridge.tokens().issue(server, player, deviceName);
-                ServerPlayer sp = server.getPlayerList().getPlayer(player);
-                JsonObject data = new JsonObject();
-                data.addProperty("token", issued.token());
-                data.addProperty("playerUuid", player.toString());
-                data.addProperty("playerName", sp != null ? sp.getGameProfile().name() : "");
-                data.addProperty("serverId", serverId(server));
-                data.addProperty("serverName", serverName(server));
-                return ApiResponse.ok(data);
-            }).get();
-        } catch (Exception e) {
-            NeroLinkCommon.LOGGER.warn("[NeroLink] pairing error", e);
-            return ApiResponse.error(500, ApiErrors.INTERNAL, "pairing failed");
+        // Pairing is issued on the server thread (player lookup + consistent device cap).
+        return onServerThread(() -> {
+            if (bridge.tokens().devicesOf(player).size() >= maxDevices) {
+                return ApiResponse.error(409, ApiErrors.VALIDATION,
+                        "device limit reached; revoke one with /nerolink devices and /nerolink revoke");
+            }
+            TokenStore.Issued issued = bridge.tokens().issue(server, player, deviceName);
+            ServerPlayer sp = server.getPlayerList().getPlayer(player);
+            JsonObject data = new JsonObject();
+            data.addProperty("token", issued.token());
+            data.addProperty("deviceId", issued.device().deviceId());
+            data.addProperty("playerUuid", player.toString());
+            data.addProperty("playerName", sp != null ? sp.getGameProfile().name() : "");
+            data.addProperty("serverId", serverId(server));
+            data.addProperty("serverName", serverName(server));
+            return ApiResponse.ok(data);
+        });
+    }
+
+    private static String optString(JsonObject body, String key) {
+        if (!body.has(key)) {
+            return null;
         }
+        var el = body.get(key);
+        return el.isJsonPrimitive() && el.getAsJsonPrimitive().isString() ? el.getAsString() : null;
+    }
+
+    /** Strip anything but a conservative id alphabet before logging client-supplied names (no log forging). */
+    private static String safe(String value) {
+        if (value == null) {
+            return "null";
+        }
+        String cleaned = value.replaceAll("[^A-Za-z0-9_./-]", "?");
+        return cleaned.length() > 64 ? cleaned.substring(0, 64) + "…" : cleaned;
     }
 
     // --- helpers ---------------------------------------------------------------------
@@ -431,7 +495,11 @@ public final class ApiDispatcher {
         return bridge.tokens().authenticate(bridge.server(), token, expiryMillis);
     }
 
-    /** Run game-touching work on the server thread; complete the future with its result. */
+    /**
+     * Run game-touching work on the server thread; complete the future with its result. If the
+     * server does not get to it within {@link #SERVER_THREAD_TIMEOUT_SECONDS} (stalled or
+     * stopping) the client gets a 503 instead of a connection that hangs forever.
+     */
     private CompletableFuture<ApiResponse> onServerThread(java.util.function.Supplier<ApiResponse> work) {
         MinecraftServer server = bridge.server();
         CompletableFuture<ApiResponse> future = new CompletableFuture<>();
@@ -439,6 +507,8 @@ public final class ApiDispatcher {
             future.complete(work.get());
             return future;
         }
+        future.completeOnTimeout(ApiResponse.error(503, ApiErrors.INTERNAL, "server busy; try again"),
+                SERVER_THREAD_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
         server.execute(() -> {
             try {
                 future.complete(work.get());
