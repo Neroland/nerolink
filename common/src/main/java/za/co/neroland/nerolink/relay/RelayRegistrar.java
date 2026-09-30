@@ -57,7 +57,7 @@ public final class RelayRegistrar {
      * Fire the registration asynchronously. Never throws; failures are folded into a
      * {@link Result}. The returned future always completes on an HTTP-client thread.
      *
-     * @param origin    relay base origin, e.g. {@code https://nerorelay.neroserver.xyz}
+     * @param origin    relay base origin, e.g. {@code https://relay.nerolandmc.net}
      * @param serverName display name sent as {@code {"serverName":...}} (the world/level name)
      * @param userAgent  a real UA, e.g. {@code nerolink-bridge/<version>}
      */

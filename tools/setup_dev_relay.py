@@ -10,7 +10,7 @@ next F5 / `ML: Run ...` launch tunnels automatically.
 
 Usage:
   python tools/setup_dev_relay.py                 # local wrangler dev relay
-  python tools/setup_dev_relay.py --relay https://nerorelay.neroserver.xyz
+  python tools/setup_dev_relay.py --relay https://relay.nerolandmc.net
   python tools/setup_dev_relay.py --new           # force a fresh registration
   python tools/setup_dev_relay.py --off           # blank relayUrl/relayKey again
 
@@ -52,7 +52,7 @@ def register(relay: str, name: str) -> dict:
             "Is it running? For a local relay start it first:\n"
             "  cd ../nerolink-relay && npx wrangler dev --ip 0.0.0.0\n"
             "(VS Code task: 'Relay: start local relay'), or pass a deployed relay\n"
-            "with --relay https://nerorelay.neroserver.xyz"
+            "with --relay https://relay.nerolandmc.net"
         )
     except json.JSONDecodeError:
         sys.exit(f"{relay}/register did not return JSON - is that URL really the NeroLink relay?")

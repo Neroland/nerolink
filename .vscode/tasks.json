@@ -265,8 +265,8 @@
 		{
 			"id": "relayOrigin",
 			"type": "promptString",
-			"description": "Relay origin (e.g. https://nerorelay.neroserver.xyz)",
-			"default": "https://nerorelay.neroserver.xyz"
+			"description": "Relay origin (e.g. https://relay.nerolandmc.net)",
+			"default": "https://relay.nerolandmc.net"
 		},
 		{
 			"id": "mlMcVersion",

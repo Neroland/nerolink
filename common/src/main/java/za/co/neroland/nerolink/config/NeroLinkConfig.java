@@ -100,15 +100,15 @@ public final class NeroLinkConfig {
             "Reserved for snapshot caching of cold sections (not used yet).");
 
     public static final ConfigValue<String> RELAY_ORIGIN = SCHEMA.string(
-            "relayOrigin", "https://nerorelay.neroserver.xyz", true,
+            "relayOrigin", "https://relay.nerolandmc.net", true,
             "Relay base origin used by /nerolink setup to register this server, e.g. "
-                    + "https://nerorelay.neroserver.xyz. /nerolink setup [origin] posts to <origin>/register "
+                    + "https://relay.nerolandmc.net. /nerolink setup [origin] posts to <origin>/register "
                     + "and stores the returned credentials per-world; you do not edit relayUrl/relayKey by hand.");
 
     public static final ConfigValue<String> RELAY_URL = SCHEMA.string(
             "relayUrl", "", true,
             "MANUAL OVERRIDE (advanced): relay tunnel URL, e.g. "
-                    + "wss://nerorelay.neroserver.xyz/tunnel/<serverId>. Blank = use the /nerolink setup "
+                    + "wss://relay.nerolandmc.net/tunnel/<serverId>. Blank = use the /nerolink setup "
                     + "registration instead. When BOTH relayUrl and relayKey are set they take precedence "
                     + "over the stored setup registration; otherwise leave both blank and use /nerolink setup.");
 

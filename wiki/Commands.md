@@ -79,7 +79,7 @@ One-shot **relay onboarding**. Registers this server with a NeroLink relay
 per-world, and dials the tunnel immediately — **no server restart**.
 
 - With no argument it uses the `relayOrigin` config value (default
-  `https://nerorelay.neroserver.xyz`).
+  `https://relay.nerolandmc.net`).
 - `/nerolink setup <https-origin>` registers against a specific relay origin.
 - If this server is **already registered** with that origin, plain `setup` doesn't
   re-register — it just re-dials the existing tunnel and reports the stored Server ID.

@@ -27,8 +27,8 @@ world).
 | `actionsDisabled` | *(empty)* | live | Comma-separated `module/action` ids to disable globally, e.g. `nerologistics/craft_order,core/ack_alert`. |
 | `snapshotCadenceHotMs` | `5000` | — | **Reserved** for snapshot caching (not used yet). WS deltas already batch to at most one per second. |
 | `snapshotCadenceColdMs` | `30000` | — | **Reserved** for snapshot caching of cold sections (not used yet). |
-| `relayOrigin` | `https://nerorelay.neroserver.xyz` | live | Relay base origin used by `/nerolink setup` to register this server. `setup` posts to `<origin>/register`. |
-| `relayUrl` | *(empty)* | restart | **Advanced manual override** — relay tunnel URL, e.g. `wss://nerorelay.neroserver.xyz/tunnel/<serverId>`. Blank = use the `/nerolink setup` registration. |
+| `relayOrigin` | `https://relay.nerolandmc.net` | live | Relay base origin used by `/nerolink setup` to register this server. `setup` posts to `<origin>/register`. |
+| `relayUrl` | *(empty)* | restart | **Advanced manual override** — relay tunnel URL, e.g. `wss://relay.nerolandmc.net/tunnel/<serverId>`. Blank = use the `/nerolink setup` registration. |
 | `relayKey` | *(empty)* | restart | **Advanced manual override** — server key paired with `relayUrl`. **Keep secret; never logged.** Blank = use the `/nerolink setup` registration. |
 | `privacyNoticeText` | *(a data-processing notice)* | live | Text returned by `GET /privacy/notice` and shown at first pairing. The default lists everything stored — hashed device token, the device name you enter, pairing and last-connected times, notification preferences — says devices you stop using are deleted automatically, that export/delete is in the app, and that relay traffic passes through without its content being stored. |
 | `telemetryEnabled` | `true` | live | Anonymous crash reporting (Sentry, EU ingest). Client-local opt-out — never synced. Set `false` to opt out. See [Privacy](Privacy.md). |

@@ -4,7 +4,9 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
-Intended as **1.0.0**, the first production release. Security, privacy and robustness
+## [1.0.0] - 2026-10-01
+
+The first production release. Security, privacy and robustness
 hardening of the bridge; the companion app must be updated for direct-mode pairing.
 Requires **Neroland Core 1.13.0 or newer, below 2.0**.
 
@@ -61,6 +63,13 @@ Requires **Neroland Core 1.13.0 or newer, below 2.0**.
 
 ### Changed
 
+- **Default relay moved to `https://relay.nerolandmc.net`** (was `https://nerorelay.neroserver.xyz`).
+  This changes the `relayOrigin` default used by `/nerolink setup`. Existing servers keep the
+  origin already written to `config/nerolink.properties` and their stored registration: set
+  `relayOrigin` to the new host and run `/nerolink setup` again, then re-pair devices (the app URL
+  changes). Dev tooling (`tools/setup_dev_relay.py`, VS Code tasks), README and wiki updated.
+- Modrinth page description links the NeroLink app beta and the ecosystem pages on
+  `nerolandmc.net`.
 - `maxClients` (default `64`) is now really the global cap on concurrent live-update
   (WebSocket) connections, direct and relay combined. Extra connections are closed with `1013`
   (direct) / `4503` (relay) "server busy". The per-player device cap moved to

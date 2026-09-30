@@ -45,7 +45,7 @@ The operator sees a bold **Server ID**, the **App URL**, and a
 `Tunnel connecting — check /nerolink status` hint. The `serverKey` is never printed in chat
 and never logged; only the relay **host** appears in lifecycle logs.
 
-- Default relay origin: `https://nerorelay.neroserver.xyz`. Point `relayOrigin` (config) at
+- Default relay origin: `https://relay.nerolandmc.net`. Point `relayOrigin` (config) at
   your own relay, or pass one: `/nerolink setup <https-origin>`.
 - Running plain `/nerolink setup` again when already registered just re-dials the existing
   tunnel.

@@ -1,3 +1,11 @@
+[![NeroLink App — Beta](https://img.shields.io/badge/NeroLink_App-Now_in_Beta-60d4e8?style=for-the-badge)](https://nerolandmc.net/nerolink/#beta) [![Explore the Neroland ecosystem](https://img.shields.io/badge/Explore-The_Neroland_Ecosystem-1a5a6c?style=for-the-badge)](https://nerolandmc.net/ecosystem/)
+
+> 📱 **The NeroLink App is in beta.** This mod is the bridge — the app puts your Neroland world on your phone: energy, alerts and machines live, quest rewards and storage search without logging in. **[Join the beta at nerolandmc.net →](https://nerolandmc.net/nerolink/#beta)**
+>
+> 🌌 **Explore the Neroland ecosystem.** See how NeroLink fits together with the rest of the Nero mods — every mod, wiki and changelog in one place. **[View the ecosystem at nerolandmc.net →](https://nerolandmc.net/ecosystem/)** · [NeroLink on the website](https://nerolandmc.net/mods/nerolink/)
+
+---
+
 # NeroLink
 
 **Your Neroland world in your pocket — check your drones, energy, quests and stock from anywhere, and nudge them while you're away.**

@@ -101,7 +101,7 @@ Config lives in Core's config system as `nerolink.properties` (reloadable with
 | `actionsDisabled` | *(empty)* | Comma-separated `module/action` ids to block |
 | `snapshotCadenceHotMs` | `5000` | Reserved (not used yet) |
 | `snapshotCadenceColdMs` | `30000` | Reserved (not used yet) |
-| `relayOrigin` | `https://nerorelay.neroserver.xyz` | Relay used by `/nerolink setup` |
+| `relayOrigin` | `https://relay.nerolandmc.net` | Relay used by `/nerolink setup` |
 | `relayUrl` | *(empty)* | **Advanced** manual-override tunnel URL (see below) |
 | `relayKey` | *(empty)* | **Advanced** manual-override server key — **keep secret** |
 | `privacyNoticeText` | *(a notice)* | Text from `GET /privacy/notice` |
@@ -149,7 +149,7 @@ run at once.
 **Setup (in-game, recommended):**
 
 1. Point `relayOrigin` at your relay if it isn't the default
-   `https://nerorelay.neroserver.xyz` (deploy your own from
+   `https://relay.nerolandmc.net` (deploy your own from
    [`../nerolink-relay/README.md`](../nerolink-relay), or use a shared one).
 2. An op runs it **once**:
    ```
@@ -210,7 +210,7 @@ npx wrangler dev --ip 0.0.0.0
 
 # terminal 2 — register + enable in all dev run configs
 python tools/setup_dev_relay.py                    # local wrangler dev relay
-python tools/setup_dev_relay.py --relay https://nerorelay.neroserver.xyz   # deployed relay
+python tools/setup_dev_relay.py --relay https://relay.nerolandmc.net   # deployed relay
 python tools/setup_dev_relay.py --off              # switch the relay back off
 ```
 

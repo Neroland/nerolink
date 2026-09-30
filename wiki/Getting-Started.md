@@ -79,7 +79,7 @@ restart**. You'll see a bold **Server ID**, an app URL, and a
 "tunnel connecting — check `/nerolink status`" hint. The secret `serverKey` is never shown
 in chat and never logged.
 
-By default this registers against `https://nerorelay.neroserver.xyz`. To use your own
+By default this registers against `https://relay.nerolandmc.net`. To use your own
 relay, pass an origin — `/nerolink setup <https-origin>` — or set `relayOrigin` in the
 config first. See [Relay](Relay.md) for the full flow and self-hosting.
 
