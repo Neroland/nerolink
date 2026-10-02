@@ -252,6 +252,26 @@ NeroLink's own wiki (these pages), served under the built-in `core` module with 
 param returns the index, `page=<slug>` returns the raw markdown. Prefer the dedicated
 [`/wiki` routes](#in-app-wiki) — they aggregate this alongside every other mod's wiki.
 
+## Other module sections
+
+Every other module's sections, actions and event topics are defined by the mod that
+registers it, not by the bridge. The dispatcher forwards any
+`GET /api/v1/{module}/{section}`, `POST /api/v1/actions/{module}/{action}` and
+`module.topic` subscription to that module and keeps no list of its own, so a mod can add
+sections in a new schema version without a bridge release. [Discovery](#discovery) is the
+source of truth for what an installed module offers, and each mod documents its payloads in
+its own wiki.
+
+One thing is true of every module's JSON because the bridge serialises it: a member whose
+value is null is left out. Clients must treat a missing key and `null` alike.
+
+As an example of a multi-section module, **`nerocolonies`** (schema `2`) advertises
+`colonies`, `colonists`, `jobs`, `research` and `exports` (unchanged from schema `1`), plus
+`summary`, `needs`, `buildings`, `professions`, `roles` and `cache`, and the actions
+`toggle_export`, `acknowledge_alert`, `prioritise_need` and `toggle_cache_sharing`. Its
+`summary` section is the one a generic client can render without knowing the module: it
+carries a `headline` and a list of `sections` with labelled items.
+
 ## Actions
 
 `POST /api/v1/actions/{module}/{action}` invokes a safe action. The bridge re-validates
