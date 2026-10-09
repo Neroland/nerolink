@@ -41,7 +41,7 @@ Built on **Neroland Core**, and *only* Core: every other Neroland mod is an opti
 
 NeroLink stores the **minimum it can**: a hashed device token, the device name you enter, pairing and last-connected times, notification preferences, and short-lived pairing codes — all keyed to your Minecraft account, and **every response is scoped to the requesting player only**. There is no "browse other players" surface. Devices unused for 90 days are deleted automatically. "Delete my NeroLink data" in the app erases NeroLink's data; `/neroland data eraseme` in-game rides Neroland Core's shared data-erasure hook to purge your data from every Neroland mod — including any push tokens held by the relay. Pairing codes and tokens are never broadcast or logged. The optional relay forwards traffic without storing it, but is not end-to-end encrypted.
 
-NeroLink also includes optional, anonymous **crash telemetry** (stack trace + mod/MC/loader/OS/Java versions only — never tokens, pairing codes, relay keys, usernames, UUIDs, IPs, or world data) via Sentry on EU servers, so bugs can be fixed. Opt out any time with `telemetryEnabled = false` in `config/nerolink.properties`. Full details: **[PRIVACY.md](https://github.com/Neroland/nerolink/blob/main/PRIVACY.md)**.
+NeroLink also includes anonymous **crash telemetry** (stack trace + mod/MC/loader/OS/Java versions only — never tokens, pairing codes, relay keys, usernames, UUIDs, IPs, or world data) via Sentry on EU servers, so bugs can be fixed. It is **on by default and opt-out**: disable it any time with `telemetryEnabled = false` in `config/nerolink.properties`. Full details: **[PRIVACY.md](https://github.com/Neroland/nerolink/blob/main/PRIVACY.md)**.
 
 ## Requirements & compatibility
 

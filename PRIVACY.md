@@ -93,4 +93,4 @@ The bridge includes optional, anonymous **crash reporting** via Sentry on EU ser
 - **Known limitation:** NeroLink reports through the global Sentry client shared with the
   other Neroland mods.
 
-Questions: **dario@neroland.co.za**.
+Questions: **info@neroland.co.za**.

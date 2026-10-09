@@ -253,6 +253,11 @@ before logging.
 - `DELETE /api/v1/session` revokes the calling device's token and closes its
   live socket.
 
+**Crash reporting** is anonymous, NeroLink-only Sentry reporting on EU servers.
+It is **on by default and opt-out**: set `telemetryEnabled = false` in
+`config/nerolink.properties` (client-local, never synced). No tokens, pairing
+codes, relay keys, usernames, UUIDs, IPs or world data are ever sent.
+
 See [`PRIVACY.md`](PRIVACY.md) for the full statement.
 
 ## Layout
