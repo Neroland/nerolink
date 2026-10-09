@@ -1,0 +1,8 @@
+{
+  "pack": {
+    "description": "NeroLink resources and data",
+    "pack_format": 84,
+    "min_format": 84,
+    "max_format": 121
+  }
+}

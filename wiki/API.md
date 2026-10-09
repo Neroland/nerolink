@@ -272,6 +272,267 @@ As an example of a multi-section module, **`nerocolonies`** (schema `2`) adverti
 `summary` section is the one a generic client can render without knowing the module: it
 carries a `headline` and a list of `sections` with labelled items.
 
+The other large module, **`neroeconomy`**, is summarised in the next section.
+
+## NeroEconomy module (schema 2)
+
+**`neroeconomy`** is the largest third-party module. Its payloads are defined by NeroEconomy
+(its own wiki is the reference for game rules); this section is the wire summary a client
+needs. Every section and action is scoped to the token's player, and a reply never names
+another player: where one is involved (an offer's sender, a bounty's target) it shows up as
+`"A player"`.
+Amounts are whole credits unless a key ends in `Cents` (hundredths of a credit) or `Bps`
+(basis points). Times are epoch milliseconds (`asOf`, `at`) or a remaining duration in
+milliseconds (`expiresIn`, `endsIn`, `maturesIn`, `sellableIn`).
+
+Discovery entry (no `wiki` section; topics are not listed in discovery):
+
+```json
+{ "id": "neroeconomy", "version": "…", "schema": 2,
+  "data": ["balance", "transactions", "market", "summary", "orders", "vault", "stocks",
+           "portfolio", "offers", "jobs", "auctions"],
+  "actions": ["trade", "order_place", "order_cancel", "rule_set", "rule_delete", "rules_pause",
+              "stock_buy", "stock_sell", "bond_buy", "pay", "offer_send", "offer_accept",
+              "offer_decline", "claim_collect", "vault_deposit", "vault_withdraw", "offer_cancel"] }
+```
+
+### NeroEconomy sections
+
+`GET /api/v1/neroeconomy/{section}`. `balance`, `transactions` and `market` are unchanged
+from schema `1`; the rest are new in schema `2`.
+
+| Section | Query params | What it holds |
+| --- | --- | --- |
+| `balance` | — | `balance`, `currency`, `symbol`, `history` and `recentTrend` (your last few ledger rows: `at`, `amount`, `reason`). |
+| `transactions` | `cursor` (0+), `limit` (1–50, default 25) | One page of your own ledger rows. |
+| `market` | `q` (item search, 64 chars max; spaces match `_`), `page`; or `view=book` with `item` | One page of sell listings and buy offers; with `view=book`, one item's order book as price levels (see below). |
+| `summary` | — | One-glance counts: balance, waiting credits, vault fill, orders, rules, offers, portfolio totals, `remote`, `marketOpen`, `frozen`. |
+| `orders` | — | Your `sell` and `buy` orders, `shops` listings and vault-backed `rules`, with rule caps. |
+| `vault` | — | Your vault lines (`index`, `item`, `qty`, `payload`), `used`, `cap`, `full`, `inGame`, `liveActions`. |
+| `stocks` | — | The exchange: `exchangeOpen`, `feeBps`, `holdMinutes`, each stock's prices and price history, bond terms (`days`, `rateBps`). |
+| `portfolio` | — | Your holdings, bonds and limits; the same again under `practice` for play credits. |
+| `offers` | — | Your `inbox` and `outbox` of direct trade offers, `muted`, `maxOffers`. |
+| `jobs` | `view`: `open` (default), `contracts`, `deliveries`, `bounties`, `mine` | Contracts, deliveries and bounties. |
+| `auctions` | `view`: `all` (default) or `mine` | Running auctions with `highestBid`, `nextBid`, `leading`. |
+
+An unknown section answers `200` with an empty object. Each read also takes one token from
+the player's in-game query budget (a burst of 10, then 5 a second); over it, the last
+snapshot served for the same query comes back with `"throttled": true` (or an empty section
+of the right shape if there is none). Lists are capped (50 rows; 128 vault lines; 64
+stocks), so the largest section stays far below the transport limits.
+
+`summary` (abridged):
+
+```json
+{ "ok": true, "data": {
+  "balance": 1380, "symbol": "cr", "currency": "nerolandcore:credits", "waitingCredits": 64,
+  "vault": { "stacks": 12, "cap": 54, "full": false },
+  "orders": { "sell": 2, "buy": 1 }, "rules": { "count": 3, "max": 8 },
+  "offers": { "incoming": 1, "outgoing": 2 },
+  "portfolio": { "value": 2150, "cost": 2000, "difference": 150, "bonds": 1 },
+  "remote": { "enabled": true, "spentToday": 1200, "dailyLimit": 5000, "leftToday": 3800 },
+  "marketOpen": true, "frozen": false, "asOf": 1791000000000
+} }
+```
+
+`orders` (one row of each list):
+
+```json
+{ "ok": true, "data": {
+  "sell": [ { "orderId": "…", "item": "minecraft:oak_log", "displayName": "Oak Log",
+              "qty": 64, "modified": false, "unitPrice": 6, "expiresIn": 82800000 } ],
+  "buy": [ { "orderId": "…", "item": "minecraft:iron_ingot", "displayName": "Iron Ingot",
+             "qty": 32, "modified": false, "unitPrice": 5, "escrow": 160, "expiresIn": 43200000 } ],
+  "shops": [ { "listingId": "…", "item": "minecraft:bread", "displayName": "Bread",
+               "qty": 40, "modified": false, "unitPrice": 3 } ],
+  "rules": [ { "ruleId": "…", "side": "buy", "target": "minecraft:wheat", "tag": false,
+               "displayName": "Wheat", "limitPrice": 4, "perDay": 64, "filledToday": 12,
+               "total": 1000, "done": 48, "budget": 952, "paused": false, "vault": true,
+               "status": "running", "statusText": "Running." } ],
+  "rulesMax": 8, "ruleValueToday": 300, "ruleValueCap": 10000, "rulesPausedAll": false,
+  "asOf": 1791000000000
+} }
+```
+
+`offers` (an inbox row; the sender is never named):
+
+```json
+{ "offerId": "…", "from": "A player",
+  "goods": [ { "item": "minecraft:emerald", "displayName": "Emerald", "qty": 8, "modified": false } ],
+  "credits": 0,
+  "ask": { "item": "minecraft:wheat", "displayName": "Wheat", "qty": 64, "modified": false },
+  "askCredits": 50, "expiresIn": 86400000 }
+```
+
+`market` with `view=book&item=minecraft:wheat` (added in schema `2`; an app that never sends
+`view` gets the listing page as before): the open buy orders (`bids`, highest first) and sell
+orders (`asks`, cheapest first) for one item, folded into price levels, at most `depth` (10)
+levels a side. The same order book the in-game Economy Hub reads its best bid and ask from, so
+the app and the game agree. Counts only: no order id, owner or account. `bestBid` / `bestAsk`
+are `0` when that side is empty. `item` is an item id (no namespace means `minecraft:`); one
+that is not an item id gives an empty book with `"item": ""`.
+
+```json
+{ "ok": true, "data": {
+  "view": "book", "item": "minecraft:wheat", "displayName": "Wheat",
+  "bids": [ { "unitPrice": 5, "qty": 96, "orders": 2 }, { "unitPrice": 4, "qty": 128, "orders": 1 } ],
+  "asks": [ { "unitPrice": 6, "qty": 40, "orders": 1 }, { "unitPrice": 7, "qty": 200, "orders": 1 } ],
+  "bestBid": 5, "bestAsk": 6, "depth": 10, "asOf": 1791000000000
+} }
+```
+
+`stocks` also carries the exchange's trading terms at the top level: `feeBps`, the fee on every
+share and index purchase and sale in basis points (NeroEconomy's `exchangeFeePercent` × 100;
+rounded up, at least 1 credit; bonds carry no fee), and `holdMinutes`, the economy minutes before
+units just bought can be sold (`shareHoldMinutes`; `0` means none). Each bond term carries its
+`days` and its whole-term interest `rateBps`.
+
+`vault` also carries `inGame` (the player is in the game now) and `liveActions` (`vault_deposit`
+and `vault_withdraw` can run now: remote actions on, economy not frozen, the player in game,
+alive and not spectating). Both are plain booleans; nothing about where the player is.
+
+### NeroEconomy live topics
+
+Subscribe with `neroeconomy.<topic>`:
+
+| Topic | Delta payload |
+| --- | --- |
+| `neroeconomy.balance` | The full `balance` section. |
+| `neroeconomy.orders` | The full `orders` section. |
+| `neroeconomy.offers` | The full `offers` section. |
+| `neroeconomy.portfolio` | The full `portfolio` section. |
+| `neroeconomy.alerts` | One alert: `{ "alertId", "kind", "text", "asOf" }`. |
+
+Events are player-scoped, published at most once a second per player and topic, and only
+while the player's app has made a request in the last two minutes, so keep a cheap read
+(such as `summary`) going while the app is open. Each `delta` item of the first four topics
+is a complete section, so a client keeps the last item of the batch. `alerts` is a topic
+only, not a section: its subscribe snapshot is `{}`. Alert `kind`s: `order_filled`,
+`contract_fulfilled`, `outbid`, `auction_won`, `shop_sold_out`, `offer_received`,
+`offer_accepted`, `offer_expired`, `rule_paused`, `rule_filled`, `bond_matured`,
+`dividend_paid`, `stock_delisted`, `vault_full`; `alertId` is `neroeconomy:<kind>`.
+
+```json
+{ "topic": "neroeconomy.alerts", "t": 1791000000000, "delta": [
+  { "alertId": "neroeconomy:order_filled", "kind": "order_filled",
+    "text": "One of your market orders was filled.", "asOf": 1791000000000 } ] }
+```
+
+Push notifications for these topics use the category **`neroeconomy`** (one category for
+all five topics); they carry no amounts or item names.
+
+### NeroEconomy actions
+
+`POST /api/v1/actions/neroeconomy/{action}`. Every action **requires** a `requestId` (a
+UUID; a body without one is refused with `400 VALIDATION`), and NeroEconomy records it
+too, so a replay that gets past the bridge's cache acts only once.
+
+| Action | Body (besides `requestId`) | Offline | Spends |
+| --- | --- | :-: | :-: |
+| `trade` | `op` `buy`: `listingId`, `qty`, `quotedUnitPrice`. `op` `sell`: `qty`, `unitPrice` to list the main hand (in game only), or `listingId` to fill a buy offer. | ✓ | buy |
+| `order_place` | `side` (`buy`/`sell`), `item`, `qty`, `unitPrice`; a sell also takes `payload` (default `0`). Goods come from and go to the vault. | ✓ | ✓ |
+| `order_cancel` | `orderId` | ✓ | — |
+| `rule_set` | `side`, `target` (item id or `#tag`), `limitPrice`, `perDay`, `total` | ✓ | ✓ |
+| `rule_delete` | `ruleId` | ✓ | — |
+| `rules_pause` | `paused` (default `true`); `ruleId` for one rule, none for all | ✓ | — |
+| `stock_buy` | `stockId`; `credits`, or `units` with `maxSpend`; `practice` | ✓ | ✓ |
+| `stock_sell` | `stockId`; `units` (absent or `0`: all that may be sold); `acceptedGain`; `practice`; `structuredRefusal` (see below) | ✓ | — |
+| `bond_buy` | `term` (`1d`, `3d`, `7d`), `principal`, `practice` | ✓ | ✓ |
+| `pay` | `recipient` (a name or UUID), `amount` | ✓ | ✓ |
+| `offer_send` | `recipient`; `goods` (up to 9 `{item, qty, payload}` lines from the vault); `credits`; `askItem`, `askQty`, `askCredits` | ✓ | ✓ |
+| `offer_accept` | `offerId` | ✓ | ✓ |
+| `offer_decline` | `offerId` | ✓ | — |
+| `offer_cancel` | `offerId` (an offer you sent) | ✓ | — |
+| `claim_collect` | — | ✓ | — |
+| `vault_deposit` | `qty` (default: the whole main-hand stack) | — | — |
+| `vault_withdraw` | none (as much as fits), or `index`, `item`, `qty` for one vault line | — | — |
+
+**Offline** is the action's `allowOffline`: only the two vault moves need the player in
+game (`409 PLAYER_OFFLINE_REQUIRED`). When `allowOfflineActions` is `false` in the bridge
+config, every action needs the player online.
+
+A success is the `balance` object plus `action`, a plain-language `message`, the action's
+own result keys and, for an action that spends, the `remote` block:
+
+```http
+POST /api/v1/actions/neroeconomy/order_place
+{ "requestId": "0f8e…", "side": "buy", "item": "minecraft:wheat", "qty": 64, "unitPrice": 4 }
+```
+
+```json
+{ "ok": true, "data": {
+  "currency": "nerolandcore:credits", "balance": 1380, "symbol": "cr", "asOf": 1791000000000,
+  "action": "order_place", "message": "Buy order placed.",
+  "orderId": "…", "side": "buy", "item": "minecraft:wheat", "qty": 64, "unitPrice": 4,
+  "filledNow": 16, "resting": 48, "listingFee": 1, "escrowed": 256, "delivery": "vault",
+  "remote": { "enabled": true, "spentToday": 1200, "dailyLimit": 5000, "leftToday": 3800 }
+} }
+```
+
+```json
+{ "ok": true, "data": { "…": "balance keys", "action": "pay", "message": "Payment sent.",
+  "paid": 150, "remote": { "enabled": true, "spentToday": 1200, "dailyLimit": 5000, "leftToday": 3800 } } }
+```
+
+`pay` never echoes the recipient; the result key is `paid` so it never shadows the balance
+keys.
+
+`offer_cancel` takes back an offer you sent, through the same path as cancelling it in game:
+its items go back to your vault and its credits to your balance (or, if the ledger cannot pay
+them out just now, to your waiting credits, `refundedToClaim: true`). It is a refund, so it
+works with the market closed, while you are away, and spends nothing; the other side is not
+told. Result keys: `offerId`, `refunded` (credits returned), `items`, `refundedToClaim`. An
+offer that is not yours, or already gone, is refused (`400 VALIDATION`).
+
+**Reduced gain on `stock_sell`.** When the Reserve can pay only part of a sale's gain, the
+sale is refused until the player accepts the smaller gain. By default this is the usual
+`400 VALIDATION` with a sentence. Send `"structuredRefusal": true` to get it as a result that
+sold nothing instead, message kept:
+
+```json
+{ "ok": true, "data": { "…": "balance keys", "action": "stock_sell",
+  "message": "The exchange can pay only 40 of your 100 gain today. …",
+  "sold": false, "refusal": "gain_reduced", "stockId": "neroeconomy:redstone_works", "units": 10,
+  "gain": 100, "payable": 40, "gainForfeited": 60, "acceptParam": "acceptedGain", "acceptValue": 40 } }
+```
+
+`refusal` is `gain_reduced` (no acceptance sent) or `gain_changed` (the `acceptedGain` sent no
+longer matches what can be paid; the new figures are in the same keys). To sell anyway, send
+the same sale again with `acceptParam` set to `acceptValue` and a **new** `requestId`. A sale
+that went through carries `"sold": true`.
+
+### NeroEconomy remote spend block
+
+`remote` is what the player may still spend through the app today, against the server's
+`remoteDailySpendLimit` (NeroEconomy config, default `5000` credits per economy-day):
+
+```json
+{ "enabled": true, "spentToday": 1200, "dailyLimit": 5000, "leftToday": 3800 }
+```
+
+`enabled` mirrors NeroEconomy's `remoteTradeEnabled`. It appears in `summary` and in the
+result of every action marked **Spends** above. An action states the most it could spend
+before it runs and is refused (`400 VALIDATION`, with the limit and what is left in the
+message) when that would pass the limit; afterwards only what it really spent is counted.
+Purchases, buy-order escrow, rule budgets, shares, bonds, payments and the credits of an
+offer all count.
+
+### NeroEconomy errors
+
+NeroEconomy uses the shared [error codes](#errors); `message` is always a plain sentence
+for the player.
+
+| Code | HTTP | When |
+| --- | --- | --- |
+| `ACTION_DISABLED` | 403 | `remoteTradeEnabled` is off, the economy is frozen, or (for trading actions) the operator closed the market. |
+| `PLAYER_OFFLINE_REQUIRED` | 409 | `vault_deposit` / `vault_withdraw` while the player is away. |
+| `VALIDATION` | 400 | Unknown action, missing `requestId`, a request id already used, over the in-game action budget (a burst of 6, then 2 a second) or one action's own limit (6, then one every 5 s), a bad parameter, over the daily remote limit, or a rule of the game (funds, stock, ownership, and so on). |
+| `INTERNAL` | 500 | An unexpected failure. Read the affected section before retrying. |
+
+A refusal moved nothing, so retry it with a **new** `requestId`: the bridge replays the
+cached response for a repeated id for 10 minutes, refusals included. Reuse the same id only
+when no response arrived (a dropped connection, `503`, `504`).
+
 ## Actions
 
 `POST /api/v1/actions/{module}/{action}` invokes a safe action. The bridge re-validates
@@ -281,7 +542,8 @@ carries a `headline` and a list of `sections` with labelled items.
    `actionsDisabled`, the request is refused with `403 ACTION_DISABLED`.
 2. **Module/action presence** — unknown module or action → `404 MODULE_ABSENT`.
 3. **Idempotency** — if the body carries a `requestId`, a repeated call replays the cached
-   response (dedup window is per player).
+   response (dedup window is per player, 10 minutes; error responses are cached too, so retry
+   a refusal with a new `requestId`).
 4. **Offline gating** — unless the action declares `allowOffline` (and
    `allowOfflineActions` isn't forcing online-only), an offline player gets
    `409 PLAYER_OFFLINE_REQUIRED`.
