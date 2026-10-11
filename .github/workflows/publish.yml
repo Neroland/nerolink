@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read   # resolve Neroland Core from GitHub Packages (see the build step)
+      packages: write  # resolve Neroland Core from GitHub Packages AND publish NeroLink's own Maven cells
     outputs:
       environment: ${{ steps.channel.outputs.environment }}
       version_type: ${{ steps.channel.outputs.version_type }}
@@ -124,6 +124,23 @@ jobs:
           :fabric:26.1.2:build :fabric:26.2:build :fabric:26.3:build
           :neoforge:26.1.2:build :neoforge:26.2:build :neoforge:26.3:build
           :forge:26.1.2:build :forge:26.2:build :forge:26.3:build
+          --stacktrace
+
+      # Publish the nine per-loader Maven artifacts to GitHub Packages (mirrors Neroland Core's publish.yml)
+      # so downstream Nero mods can resolve NeroLink from a remote repo (CI runners + fresh clones have an
+      # empty ~/.m2). CurseForge/Modrinth/GitHub Releases carry player-facing jars, not Gradle dependencies.
+      # The jars were just built above, so `publish`'s `jar` dependency is UP-TO-DATE and this step only
+      # uploads — no second build. GITHUB_TOKEN is the workflow's own token (packages: write granted above).
+      # Privacy (POPIA/GDPR): only build artifacts + version strings are handled or logged.
+      - name: Publish Maven artifacts to GitHub Packages
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          ./gradlew
+          :fabric:26.1.2:publish :fabric:26.2:publish :fabric:26.3:publish
+          :neoforge:26.1.2:publish :neoforge:26.2:publish :neoforge:26.3:publish
+          :forge:26.1.2:publish :forge:26.2:publish :forge:26.3:publish
           --stacktrace
 
       # Release channel from the version suffix: -alpha -> alpha, -beta -> beta, else release.
