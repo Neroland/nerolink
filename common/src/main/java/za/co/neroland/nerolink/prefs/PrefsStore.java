@@ -15,6 +15,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
+import za.co.neroland.nerolandcore.data.SavedDataRecovery;
 import za.co.neroland.nerolink.NeroLinkCommon;
 
 /**
@@ -39,7 +40,7 @@ public final class PrefsStore extends SavedData {
     }
 
     public static PrefsStore get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
+        return SavedDataRecovery.get(server.overworld(), TYPE, PrefsStore::new, ID.toString());
     }
 
     /** A player's notification category flags (a sorted copy; empty if never set). */

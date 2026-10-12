@@ -4,6 +4,26 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+### Changed
+
+- Requires **Neroland Core 1.15.0 or newer, below 2.0** (was 1.13.0). Core 1.15.0 detects saved-data
+  files that Minecraft 26.x silently fails to decode, so a damaged store is restored from its backup
+  instead of the backup being overwritten with an empty store.
+
+### Fixed
+
+- **Crash-safe saved data.** The device-token, notification-preference and relay stores now load
+  through Core's `SavedDataRecovery`. A corrupt or unreadable file no longer crashes the server. The
+  store is restored from its last-known-good backup or, if there is none, starts empty.
+- **Erasure reaches the backups.** A POPIA/GDPR erasure request now refreshes the token and
+  preference backups straight away, and the relay store's backup when a relay is in use, so the
+  erased player's rows are not left in a backup copy.
+
+### Tests
+
+- Added an erasure conformance test that runs NeroLink's token and preference stores through Core's
+  `ErasureConformance` harness.
+
 ## [1.0.0] - 2026-10-01
 
 The first production release. Security, privacy and robustness

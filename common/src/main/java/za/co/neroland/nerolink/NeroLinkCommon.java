@@ -4,10 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import za.co.neroland.nerolandcore.data.PlayerDataErasure;
+import za.co.neroland.nerolandcore.data.SavedDataRecovery;
 import za.co.neroland.nerolink.auth.TokenStore;
 import za.co.neroland.nerolink.config.NeroLinkConfig;
 import za.co.neroland.nerolink.platform.InstalledMods;
 import za.co.neroland.nerolink.prefs.PrefsStore;
+import za.co.neroland.nerolink.relay.RelaySettings;
 
 /**
  * Loader-agnostic entry point for NeroLink — the companion-app bridge. Each loader entry point
@@ -74,10 +76,21 @@ public final class NeroLinkCommon {
         TokenStore tokens = TokenStore.get(server);
         java.util.List<TokenStore.Device> devices = tokens.devicesOf(uuid);
         tokens.forget(uuid);
-        PrefsStore.get(server).forget(uuid);
+        PrefsStore prefs = PrefsStore.get(server);
+        prefs.forget(uuid);
+        // POPIA/GDPR: Core's SavedDataRecovery guard keeps a last-known-good backup of each store,
+        // a second copy of the same player-keyed rows. Refresh both inside this request so the
+        // erased rows do not linger in the backup until a later periodic pass.
+        net.minecraft.server.level.ServerLevel overworld = server.overworld();
+        SavedDataRecovery.backupNow(overworld, TokenStore.TYPE, tokens, TokenStore.ID.toString());
+        SavedDataRecovery.backupNow(overworld, PrefsStore.TYPE, prefs, PrefsStore.ID.toString());
         if (NeroLinkBridge.resolveRelayCredentials(server) != null) {
             // Only servers that use a relay can have push registrations there.
-            za.co.neroland.nerolink.relay.RelaySettings.get(server).queueErase(uuid);
+            RelaySettings relay = RelaySettings.get(server);
+            relay.queueErase(uuid);
+            // queueErase drops this player's queued per-device unbind ops (UUID + device id); refresh
+            // the relay store's backup too so those dropped ops do not survive there.
+            SavedDataRecovery.backupNow(overworld, RelaySettings.TYPE, relay, RelaySettings.ID.toString());
         }
         NeroLinkBridge bridge = NeroLinkBridge.instance();
         if (bridge != null) {

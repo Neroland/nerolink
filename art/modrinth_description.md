@@ -45,7 +45,7 @@ NeroLink also includes anonymous **crash telemetry** (stack trace + mod/MC/loade
 
 ## Requirements & compatibility
 
-- **Requires [Neroland Core](https://modrinth.com/mod/nerolandcore) 1.13.0 or newer (below 2.0)** — install it alongside NeroLink (it loads first).
+- **Requires [Neroland Core](https://modrinth.com/mod/nerolandcore) 1.15.0 or newer (below 2.0)** — install it alongside NeroLink (it loads first).
 - Every other Neroland mod is optional and auto-discovered; no third-party mod is required or touched.
 - **Modpacks are allowed and encouraged** — any platform, no need to ask. Use the official files and credit *NeroLink by Neroland* with links to the [CurseForge page](https://www.curseforge.com/minecraft/mc-mods/nerolink) and the [GitHub repository](https://github.com/Neroland/nerolink). Full terms: [LICENSE](https://github.com/Neroland/nerolink/blob/main/LICENSE).
 

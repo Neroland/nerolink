@@ -15,6 +15,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
+import za.co.neroland.nerolandcore.data.SavedDataRecovery;
 import za.co.neroland.nerolink.NeroLinkCommon;
 
 /**
@@ -75,7 +76,7 @@ public final class RelaySettings extends SavedData {
     }
 
     public static RelaySettings get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
+        return SavedDataRecovery.get(server.overworld(), TYPE, RelaySettings::new, ID.toString());
     }
 
     // --- state -----------------------------------------------------------------------

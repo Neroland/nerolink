@@ -10,7 +10,7 @@ server-validated actions. It is *a window, not a controller*: it never edits
 the world, never moves the player, and does nothing a player couldn't do
 standing at the relevant block in-game.
 
-Only **Neroland Core 1.13.0 or newer (below 2.0)** is required. Every other Nero mod is a
+Only **Neroland Core 1.15.0 or newer (below 2.0)** is required. Every other Nero mod is a
 progressive enhancement, discovered at connect time — a Core-only server is
 already useful (progression gates, alerts, server status). Companion clients
 speak the NeroLink API described in the ecosystem docs.
@@ -27,7 +27,7 @@ tunnel. No gameplay content; this mod adds no blocks or items.
 - **Loaders:** NeoForge, MinecraftForge/Forge, Fabric (the "9 cells")
 - **Java:** 25
 - Mod id: `nerolink` · package `za.co.neroland.nerolink`
-- **Requires:** Neroland Core `[1.13.0,2.0)` (loads before NeroLink)
+- **Requires:** Neroland Core `[1.15.0,2.0)` (loads before NeroLink)
 
 ## What the bridge does
 
@@ -283,7 +283,7 @@ Stonecutter:
           :fabric:26.1.2:build :fabric:26.2:build :fabric:26.3:build   # all nine
 ```
 
-Core (build pin `1.13.0`) is resolved from `mavenLocal()` (run `./gradlew publishToMavenLocal`
+Core (build pin `1.15.0`) is resolved from `mavenLocal()` (run `./gradlew publishToMavenLocal`
 in `../neroland-core`) or from GitHub Packages on CI. See
 [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) for contributor context.
 

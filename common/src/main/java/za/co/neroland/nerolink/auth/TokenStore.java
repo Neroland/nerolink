@@ -19,6 +19,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
+import za.co.neroland.nerolandcore.data.SavedDataRecovery;
 import za.co.neroland.nerolink.NeroLinkCommon;
 
 /**
@@ -74,7 +75,7 @@ public final class TokenStore extends SavedData {
     }
 
     public static TokenStore get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
+        return SavedDataRecovery.get(server.overworld(), TYPE, TokenStore::new, ID.toString());
     }
 
     /** A stored device pairing. {@code tokenHash} is the SHA-256 of the bearer token. */

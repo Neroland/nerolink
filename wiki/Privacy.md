@@ -20,6 +20,11 @@ relay key, relay URL — in the world's saved data, and the bridge's TLS certifi
 in chat. While the relay tunnel is down, pending `erase` / `push_unbind` messages (player
 UUID and device id only, at most 4096) wait in the same saved data until delivered.
 
+Each of these saved-data stores also has one crash-recovery backup in the same world save
+(Neroland Core's `SavedDataRecovery`, `data/nerolink_<store>_backup.dat`). It holds exactly the
+same fields, is refreshed as the store changes, and is refreshed immediately when a player's
+data is erased, so an erasure covers the backup too.
+
 Pairing rate limits count failed attempts per source for one minute — the client IP on
 direct connections, or a salted, daily-rotating hash of it via the relay — in memory only.
 
