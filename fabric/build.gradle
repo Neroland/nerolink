@@ -73,8 +73,8 @@ dependencies {
 
     // Sentry SDK (telemetry/NeroLinkTelemetry): compile against it + embed it as a jar-in-jar so the
     // shipped Fabric jar carries it. Counterpart to the NeoForge JarJar bundling.
-    implementation 'io.sentry:sentry:8.45.0'
-    include 'io.sentry:sentry:8.45.0'
+    implementation 'io.sentry:sentry:8.60.0'
+    include 'io.sentry:sentry:8.60.0'
 
     // JEI (optional recipe-viewer compat). The shared compat/jei plugin lives in `common` and uses ONLY
     // the loader-agnostic JEI common API; on Fabric it compiles against the common + fabric APIs and loads
