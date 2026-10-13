@@ -213,6 +213,15 @@ The player's own active alerts, from Core's alert service:
 ] }
 ```
 
+`GET /api/v1/core/alerts` lists the alerts of **every** module. The live topic is
+per module: since Neroland Core 1.15.0 an alert raised by module `m` is published on topic
+**`m.alerts`** (for example `nerologistics.alerts`, `neroquests.alerts`), not on
+`core.alerts`, which carries only the bridge's own alerts. Subscribe to each module's
+`.alerts` topic you want live. Push notifications follow the same split: a push's category
+is the module that raised it, so a player who opted into `core` only gets no pushes for
+another module's alerts until that module's own category (such as `neroquests`) is switched
+on in [`/prefs/notifications`](#privacy-endpoints).
+
 ### `energy` / `storage`
 
 Well-formed but **empty in v1**, each with a `note`. Core exposes no cheap per-player
@@ -272,7 +281,8 @@ As an example of a multi-section module, **`nerocolonies`** (schema `2`) adverti
 `summary` section is the one a generic client can render without knowing the module: it
 carries a `headline` and a list of `sections` with labelled items.
 
-The other large module, **`neroeconomy`**, is summarised in the next section.
+The other large modules, **`neroeconomy`** and **`neroquests`**, are summarised in the next
+sections.
 
 ## NeroEconomy module (schema 2)
 
@@ -532,6 +542,80 @@ for the player.
 A refusal moved nothing, so retry it with a **new** `requestId`: the bridge replays the
 cached response for a repeated id for 10 minutes, refusals included. Reuse the same id only
 when no response arrived (a dropped connection, `503`, `504`).
+
+## NeroQuests module (schema 2)
+
+**`neroquests`** (schema `2`, NeroQuests 0.4.0) shows the player's quest book. NeroQuests'
+own wiki page **Link Module** is the reference for every field; this section is the wire
+summary. Every section and event payload carries `"schema_version": 2`, every reply is
+scoped to the token's player (plus the world's shared `scope: server` rows, which name
+nobody), and quests behind a gate the player has not opened are left out, exactly as in the
+quest book. The bridge needs no NeroQuests-specific code: the routes below are the generic
+[module pass-through](#other-module-sections).
+
+### NeroQuests sections
+
+`GET /api/v1/neroquests/{section}`. Any other section name returns `{}`.
+
+| Section | What it is |
+| --- | --- |
+| `quests` | Every quest the player can see, with objectives (`current` / `target` / `text`), rewards, prerequisites and `state` (`completed`, `in_progress`, `available`, `locked`), plus `counts` and `player_online`. |
+| `chapters` | The visible chapters, each with `order` (quest-book tab order; gaps are normal) and its visible quest ids. |
+| `custom_authoring` | `{ "can_author": bool }` — whether the player may write custom quests in game right now. |
+| `owed` | Rewards kept for the player (oldest first, at most 64): `key`, `type` (`currency` / `item` / `xp`), amounts, `quest`, `reason`, `permanent`. |
+| `progress` | Every visible quest's counters, in the `progress` event's shape with `"scope": "snapshot"`; replace the whole progress view with it. |
+
+While the player is offline, `quests` reports `"player_online": false` and team-scope gates
+read as closed, so the offline view is a subset of the online one.
+
+### NeroQuests text rules
+
+- **Spine and pack** quests and chapters: `title` / `description` are **translation keys**;
+  `title_text` / `description_text` hold the English text resolved on the server. When a key
+  cannot be resolved the `_text` field is left out — show the key.
+- **Custom** quests and chapters (`"source": "custom"`) carry the player-written text **only**
+  in `title_text` / `description_text`, with no `title` / `description` key. Never try to
+  translate custom text.
+- An objective's `content` is a resource id, `#tag` or channel label, never player text.
+
+### NeroQuests live topics
+
+Subscribe with `neroquests.<topic>`. Each has a consistent-start snapshot:
+
+| Topic | Delta payload | Subscribe snapshot |
+| --- | --- | --- |
+| `neroquests.progress` | Changed counters: `{ scope, quests: [ { quest, title?, title_text?, objectives: [ { index, current, target? } ] } ] }`. `scope: server` rows are broadcast without a player id. | The `progress` section |
+| `neroquests.quest_completed` | `{ quest, title?, title_text?, scope, source, namespace, timestamp }` | The 50 most recent visible completions |
+| `neroquests.reward_owed` | One `owed` row | The `owed` section |
+| `neroquests.reward_claimed` | `{ key, type, amount` or `item` + `count, quest?, reason, remaining }` — the part just handed over | `{ "claimed": [] }` (no history is kept) |
+| `neroquests.alerts` | One alert (see below) | — |
+
+Alerts are raised through Core's alert store (module `neroquests`, severity `INFO`, so they
+also appear in [`core/alerts`](#alerts)), each at most once an hour per player. The text is
+always one of two fixed English sentences, never a quest name, id or amount:
+
+| Alert id | Text |
+| --- | --- |
+| `neroquests:reward_waiting` | `A reward is waiting for you` |
+| `neroquests:new_chapter` | `A new chapter appeared` |
+
+Push notifications for these topics use the category **`neroquests`**.
+
+### NeroQuests action: `claim_reward`
+
+`POST /api/v1/actions/neroquests/claim_reward` hands over kept rewards. Params, all optional:
+
+| Param | Effect |
+| --- | --- |
+| `quest` | Settle only entries from that quest. It must be visible to the player and completed, else `400 VALIDATION` (a hidden quest answers exactly like a missing one). |
+| `key` | Settle only the `owed` entry with that key — the request's idempotency key. If no such entry exists (already settled, or never the player's) the call **succeeds** with nothing delivered and `"already_settled": true`. |
+| neither | Settle everything deliverable. |
+
+Allowed while the player is offline, but an offline claim settles **currency only**; items
+and experience stay owed until the player is in the world and alive. The result carries
+`delivered[]`, `remaining`, the still-kept `owed[]`, and `key` / `already_settled` when a
+`key` was sent. Errors: `VALIDATION` (malformed `quest` or `key`; unknown, hidden or
+incomplete quest) and `INTERNAL`.
 
 ## Actions
 

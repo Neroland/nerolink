@@ -5,7 +5,7 @@
   "name": "${mod_name}",
   "description": "Server-side bridge for the NeroLink companion app: pair your phone in-game and see your Neroland base live - energy, quests, progression and more - over a pinned TLS connection or the NeroLink relay. Requires Neroland Core.",
   "contact": {
-    "homepage": "https://neroland.co.za"
+    "homepage": "https://nerolandmc.net"
   },
   "authors": ["${mod_authors}"],
   "license": "${mod_license}",
