@@ -4,6 +4,40 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+### Added
+
+- **Mod-supplied notification copy (additive).** A player-scoped link event may carry a reserved `_notify`
+  object `{title ≤ 120, body ≤ 240, deepLink ≤ 256}`; the relay push uses those strings instead of the generic
+  "NeroLink — <module> / <topic> update". Each field is validated on its own and falls back to the generic value;
+  the deep link must match `nerolink://server/<id>/<module>[/<entity>[/<entity>]]` and `{server}` is replaced by
+  this server's relay id. Nothing else in the payload is read; the wire API and WS frames are unchanged.
+  Producers are responsible for keeping `_notify` text non-personal — it is shown on lock screens.
+
+### Changed
+
+- Requires **Neroland Core 1.15.0 or newer, below 2.0** (was 1.13.0). Core 1.15.0 detects saved-data
+  files that Minecraft 26.x silently fails to decode, so a damaged store is restored from its backup
+  instead of the backup being overwritten with an empty store.
+- Alert pushes fire only when an alert is **raised**; acknowledging, snoozing or eviction no longer sends a push.
+- A module that supplies its own copy for an event shadows the generic alert push for the same player and
+  module for two seconds, so one security event is one notification.
+
+### Fixed
+
+- **Crash-safe saved data.** The device-token, notification-preference and relay stores now load
+  through Core's `SavedDataRecovery`. A corrupt or unreadable file no longer crashes the server. The
+  store is restored from its last-known-good backup or, if there is none, starts empty.
+- **Erasure reaches the backups.** A POPIA/GDPR erasure request now refreshes the token and
+  preference backups straight away, and the relay store's backup when a relay is in use, so the
+  erased player's rows are not left in a backup copy.
+
+### Tests
+
+- Added an erasure conformance test that runs NeroLink's token and preference stores through Core's
+  `ErasureConformance` harness.
+- Added `NotifyCopyTest` for the `_notify` caps, per-field fallback, deep-link validation, the raised-only
+  alert filter and the two-second shadow.
+
 ## [1.0.0] - 2026-10-01
 
 The first production release. Security, privacy and robustness

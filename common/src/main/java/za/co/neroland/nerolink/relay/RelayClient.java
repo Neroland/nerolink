@@ -571,9 +571,14 @@ public final class RelayClient {
     /**
      * Pushes {@code notify} frames for player-scoped Core link events whose category (the module id)
      * the player has opted into, but only when that player is not currently watching via any live WS
-     * client (they would already see the delta). Payload contents are never included (privacy).
+     * client (they would already see the delta). The only payload member ever read is the reserved,
+     * validated {@code _notify} copy (see {@link NotifyCopy}); everything else stays out (privacy).
+     * Alert pushes fire only when an alert is raised, and a rich push briefly shadows the generic
+     * push for the same player and module.
      */
     private final class NotifyForwarder implements java.util.function.Consumer<za.co.neroland.nerolandcore.link.LinkEvent> {
+        private final NotifyCopy.RichPushShadow richShadow = new NotifyCopy.RichPushShadow();
+
         @Override
         public void accept(za.co.neroland.nerolandcore.link.LinkEvent event) {
             if (!isConnected() || event == null || event.isBroadcast()) {
@@ -590,16 +595,35 @@ public final class RelayClient {
             if (bridge.wsHub().isPlayerConnected(player)) {
                 return; // watching live; a push would be redundant
             }
-            // TODO: richer per-topic copy. Deliberately plain and payload-free for privacy.
-            String title = "NeroLink — " + event.moduleId();
-            String body = event.topic() + " update";
+            if (!NotifyCopy.shouldPush(event)) {
+                return; // alerts acked/snoozed/evicted never push
+            }
+            NotifyCopy.Copy copy = NotifyCopy.resolve(event, serverIdOrEmpty());
+            long now = System.currentTimeMillis();
+            if (copy.rich()) {
+                richShadow.remember(player, category, now);
+            } else if (richShadow.shadowed(player, category, now)) {
+                return; // the module already sent its own copy for this event
+            }
             JsonObject frame = new JsonObject();
             frame.addProperty("t", "notify");
             frame.addProperty("playerUuid", player.toString());
             frame.addProperty("category", category);
-            frame.addProperty("title", title);
-            frame.addProperty("body", body);
+            frame.addProperty("title", copy.title());
+            frame.addProperty("body", copy.body());
+            if (copy.deepLink() != null) {
+                frame.addProperty("deepLink", copy.deepLink());
+            }
             send(Json.toString(frame));
+        }
+
+        private String serverIdOrEmpty() {
+            try {
+                String id = RelaySettings.get(bridge.server()).serverId();
+                return id == null ? "" : id;
+            } catch (RuntimeException e) {
+                return "";
+            }
         }
     }
 
