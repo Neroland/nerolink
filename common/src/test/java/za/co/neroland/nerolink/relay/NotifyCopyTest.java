@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.UUID;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 
 import org.junit.jupiter.api.Test;
 
@@ -177,5 +178,12 @@ class NotifyCopyTest {
             s.remember(new UUID(0L, i), "m", now);
         }
         assertTrue(s.size() <= NotifyCopy.RichPushShadow.MAX_ENTRIES);
+    }
+
+    @Test
+    void textStripsControlAndFormatCharacters() {
+        String in = "La\u0007ser\u007F grid\u0085 \u202Etripped\u200B";
+        assertEquals("Laser grid tripped", NotifyCopy.text(new JsonPrimitive(in), 120));
+        assertNull(NotifyCopy.text(new JsonPrimitive("\u202E\u200B\u007F"), 120));
     }
 }

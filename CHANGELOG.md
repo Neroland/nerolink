@@ -21,6 +21,8 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 - Alert pushes fire only when an alert is **raised**; acknowledging, snoozing or eviction no longer sends a push.
 - A module that supplies its own copy for an event shadows the generic alert push for the same player and
   module for two seconds, so one security event is one notification.
+- Supplied notification text drops control characters and invisible Unicode formatting marks (such as
+  right-to-left overrides) before it reaches the lock screen.
 
 ### Fixed
 

@@ -100,7 +100,10 @@ public final class NotifyCopy {
         return isString(verb) && RAISED.equals(verb.getAsString());
     }
 
-    /** trim → strip chars below 0x20 → truncate; null when missing, non-string or blank. */
+    /**
+     * trim → strip control characters (C0, DEL, C1) and Unicode format characters (bidi overrides,
+     * zero-width marks) → truncate; null when missing, non-string or blank.
+     */
     static String text(JsonElement el, int max) {
         if (!isString(el)) {
             return null;
@@ -109,7 +112,8 @@ public final class NotifyCopy {
         StringBuilder sb = new StringBuilder(Math.min(s.length(), max + 16));
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
-            if (c >= 0x20) {
+            int type = Character.getType(c);
+            if (type != Character.CONTROL && type != Character.FORMAT) {
                 sb.append(c);
             }
         }
