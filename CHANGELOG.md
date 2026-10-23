@@ -4,6 +4,8 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-20
+
 ### Added
 
 - **Mod-supplied notification copy (additive).** A player-scoped link event may carry a reserved `_notify`

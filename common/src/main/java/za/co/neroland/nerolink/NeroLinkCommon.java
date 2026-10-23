@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import za.co.neroland.nerolandcore.data.PlayerDataErasure;
+import za.co.neroland.nerolandcore.data.SavedDataRecovery;
 import za.co.neroland.nerolink.auth.TokenStore;
 import za.co.neroland.nerolink.config.NeroLinkConfig;
 import za.co.neroland.nerolink.platform.InstalledMods;
@@ -74,10 +75,20 @@ public final class NeroLinkCommon {
         TokenStore tokens = TokenStore.get(server);
         java.util.List<TokenStore.Device> devices = tokens.devicesOf(uuid);
         tokens.forget(uuid);
-        PrefsStore.get(server).forget(uuid);
+        // Refresh each store's last-known-good backup at once so the erasure reaches Core's
+        // backup copy too (SavedDataRecovery contract), not just the primary file.
+        SavedDataRecovery.backupNow(server.overworld(), TokenStore.TYPE, tokens, TokenStore.ID.toString());
+        PrefsStore prefs = PrefsStore.get(server);
+        prefs.forget(uuid);
+        SavedDataRecovery.backupNow(server.overworld(), PrefsStore.TYPE, prefs, PrefsStore.ID.toString());
         if (NeroLinkBridge.resolveRelayCredentials(server) != null) {
-            // Only servers that use a relay can have push registrations there.
-            za.co.neroland.nerolink.relay.RelaySettings.get(server).queueErase(uuid);
+            // Only servers that use a relay can have push registrations there. The tombstone is
+            // backed up too, so a restore from backup still delivers the erasure to the relay.
+            za.co.neroland.nerolink.relay.RelaySettings relay =
+                    za.co.neroland.nerolink.relay.RelaySettings.get(server);
+            relay.queueErase(uuid);
+            SavedDataRecovery.backupNow(server.overworld(), za.co.neroland.nerolink.relay.RelaySettings.TYPE,
+                    relay, za.co.neroland.nerolink.relay.RelaySettings.ID.toString());
         }
         NeroLinkBridge bridge = NeroLinkBridge.instance();
         if (bridge != null) {

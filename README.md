@@ -15,7 +15,7 @@ progressive enhancement, discovered at connect time — a Core-only server is
 already useful (progression gates, alerts, server status). Companion clients
 speak the NeroLink API described in the ecosystem docs.
 
-**Status:** heading for **1.0.0**, the first production release (the current
+**Status:** **1.1.0**; 1.0.0 was the first production release (the current
 version is `mod_version` in `gradle.properties`; changes are listed in
 [`CHANGELOG.md`](CHANGELOG.md)). The v1 bridge is implemented: TLS pairing,
 discovery, snapshots, actions, WebSocket deltas, privacy endpoints and the relay
