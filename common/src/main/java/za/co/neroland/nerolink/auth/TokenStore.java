@@ -19,6 +19,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
+import za.co.neroland.nerolandcore.data.SavedDataCompat;
 import za.co.neroland.nerolandcore.data.SavedDataRecovery;
 import za.co.neroland.nerolink.NeroLinkCommon;
 
@@ -66,7 +67,7 @@ public final class TokenStore extends SavedData {
     public static final Identifier ID = Identifier.fromNamespaceAndPath(NeroLinkCommon.MOD_ID, "tokens");
 
     public static final SavedDataType<TokenStore> TYPE =
-            new SavedDataType<>(ID, TokenStore::new, codec(), null);
+            SavedDataCompat.type(ID, TokenStore::new, codec());
 
     /** deviceId -> device row. */
     private final Map<String, Device> byDevice = new ConcurrentHashMap<>();

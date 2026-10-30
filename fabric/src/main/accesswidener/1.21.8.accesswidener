@@ -1,0 +1,3 @@
+accessWidener	v2	named
+# Minecraft 1.21.8 (obfuscated, Mojang-mapped in dev). Same purpose as ../resources/nerolink.accesswidener,
+# which is the 26.x (official-namespace) file. The build swaps this one into the 1.21.8 jar.

@@ -102,7 +102,7 @@ public final class NeroLinkTelemetry {
             options.setAttachServerName(false);        // hostname is identifying
             options.setEnableUncaughtExceptionHandler(true);
             options.setEnableAutoSessionTracking(false);
-            options.setBeforeSend((event, hint) -> filterAndScrub(event));
+            options.setBeforeSend((event, hint) -> ForeignMixinFailure.matches(event) ? null : filterAndScrub(event));
         });
         Sentry.configureScope(scope -> {
             scope.setTag("loader", InstalledMods.loader().toLowerCase(Locale.ROOT));

@@ -3,6 +3,7 @@ package za.co.neroland.nerolink.command;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
@@ -46,6 +47,15 @@ public final class NeroLinkCommand {
     private NeroLinkCommand() {
     }
 
+    /** Gamemaster-level (op 2) requirement; 1.21.6+ expresses it as a permission check object. */
+    private static Predicate<CommandSourceStack> gamemasters() {
+        //? if >=1.21.6 {
+        return Commands.hasPermission(Commands.LEVEL_GAMEMASTERS);
+        //?} else {
+        /*return source -> source.hasPermission(Commands.LEVEL_GAMEMASTERS);
+        *///?}
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("nerolink")
                 .then(Commands.literal("pair").executes(NeroLinkCommand::pair))
@@ -54,10 +64,10 @@ public final class NeroLinkCommand {
                         .then(Commands.argument("device", StringArgumentType.string())
                                 .executes(NeroLinkCommand::revoke)))
                 .then(Commands.literal("status")
-                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .requires(gamemasters())
                         .executes(NeroLinkCommand::status))
                 .then(Commands.literal("setup")
-                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .requires(gamemasters())
                         .executes(ctx -> setup(ctx, null, false))
                         .then(Commands.literal("force")
                                 .executes(ctx -> setup(ctx, null, true))

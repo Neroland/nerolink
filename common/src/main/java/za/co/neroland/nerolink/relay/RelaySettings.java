@@ -15,6 +15,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
+import za.co.neroland.nerolandcore.data.SavedDataCompat;
 import za.co.neroland.nerolandcore.data.SavedDataRecovery;
 import za.co.neroland.nerolink.NeroLinkCommon;
 
@@ -46,7 +47,7 @@ public final class RelaySettings extends SavedData {
     public static final Identifier ID = Identifier.fromNamespaceAndPath(NeroLinkCommon.MOD_ID, "relay");
 
     public static final SavedDataType<RelaySettings> TYPE =
-            new SavedDataType<>(ID, RelaySettings::new, codec(), null);
+            SavedDataCompat.type(ID, RelaySettings::new, codec());
 
     private String relayOrigin;
     private String serverId;

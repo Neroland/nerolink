@@ -8,6 +8,9 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
+//? if <1.21.6 {
+/*import net.minecraftforge.common.MinecraftForge;
+*///?}
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -35,9 +38,17 @@ public final class NeroLinkForge {
         NeroLinkTelemetry.init(!FMLEnvironment.production,
                 FMLEnvironment.dist == Dist.CLIENT, minecraftVersion());
 
+        //? if >=1.21.6 {
         RegisterCommandsEvent.BUS.addListener(event -> NeroLinkCommand.register(event.getDispatcher()));
         ServerStartedEvent.BUS.addListener(event -> NeroLinkBridge.start(event.getServer()));
         ServerStoppingEvent.BUS.addListener(event -> NeroLinkBridge.stop());
+        //?} else {
+        /*// Forge before 1.21.6 (EventBus 6) has one game event bus instead of per-event buses.
+        MinecraftForge.EVENT_BUS.addListener((RegisterCommandsEvent event) ->
+                NeroLinkCommand.register(event.getDispatcher()));
+        MinecraftForge.EVENT_BUS.addListener((ServerStartedEvent event) -> NeroLinkBridge.start(event.getServer()));
+        MinecraftForge.EVENT_BUS.addListener((ServerStoppingEvent event) -> NeroLinkBridge.stop());
+        *///?}
     }
 
     /**

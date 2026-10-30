@@ -460,7 +460,11 @@ public final class ApiDispatcher {
             data.addProperty("token", issued.token());
             data.addProperty("deviceId", issued.device().deviceId());
             data.addProperty("playerUuid", player.toString());
+            //? if >=1.21.9 {
             data.addProperty("playerName", sp != null ? sp.getGameProfile().name() : "");
+            //?} else {
+            /*data.addProperty("playerName", sp != null ? sp.getGameProfile().getName() : "");
+            *///?}
             data.addProperty("serverId", serverId(server));
             data.addProperty("serverName", serverName(server));
             return ApiResponse.ok(data);

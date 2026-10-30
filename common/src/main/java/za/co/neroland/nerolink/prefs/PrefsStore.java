@@ -15,6 +15,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
+import za.co.neroland.nerolandcore.data.SavedDataCompat;
 import za.co.neroland.nerolandcore.data.SavedDataRecovery;
 import za.co.neroland.nerolink.NeroLinkCommon;
 
@@ -31,7 +32,7 @@ public final class PrefsStore extends SavedData {
     public static final Identifier ID = Identifier.fromNamespaceAndPath(NeroLinkCommon.MOD_ID, "prefs");
 
     public static final SavedDataType<PrefsStore> TYPE =
-            new SavedDataType<>(ID, PrefsStore::new, codec(), null);
+            SavedDataCompat.type(ID, PrefsStore::new, codec());
 
     /** player -> (category -> enabled). */
     private final Map<UUID, Map<String, Boolean>> byPlayer = new LinkedHashMap<>();

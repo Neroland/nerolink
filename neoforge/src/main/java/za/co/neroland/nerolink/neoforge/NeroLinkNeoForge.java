@@ -34,8 +34,13 @@ public final class NeroLinkNeoForge {
         NeroLinkCommon.LOGGER.info("[NeroLink] NeoForge bootstrap");
         NeroLinkCommon.init();
         collectInstalledMods();
+        //? if >=1.21.9 {
         NeroLinkTelemetry.init(!FMLEnvironment.isProduction(),
                 FMLEnvironment.getDist() == Dist.CLIENT, minecraftVersion());
+        //?} else {
+        /*NeroLinkTelemetry.init(!FMLEnvironment.production,
+                FMLEnvironment.dist == Dist.CLIENT, minecraftVersion());
+        *///?}
 
         NeoForge.EVENT_BUS.addListener((RegisterCommandsEvent event) ->
                 NeroLinkCommand.register(event.getDispatcher()));

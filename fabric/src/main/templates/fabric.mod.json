@@ -22,8 +22,8 @@
   ],
   "depends": {
     "fabricloader": ">=${fabric_loader_version}",
-    "minecraft": ">=${minecraft_version}",
-    "java": ">=25",
+    "minecraft": "${minecraft_requirement}",
+    "java": ">=21",
     "fabric-api": "*",
     "nerolandcore": ">=${nerolandcore_version} <2.0.0"
   }

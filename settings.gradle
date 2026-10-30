@@ -11,6 +11,7 @@ pluginManagement {
         id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
         id 'net.neoforged.moddev' version '2.0.148'      // common (NeoForm) + neoforge
         id 'net.fabricmc.fabric-loom' version '1.18.4' // fabric — 1.17 handles de-obf 26.x (omit mappings)
+        id 'net.fabricmc.fabric-loom-remap' version '1.18.4' // fabric on obfuscated 1.21.x (Mojang mappings + remapJar)
         id 'net.minecraftforge.gradle' version '7.0.40'  // forge — FG 7 handles de-obf 26.x
         id 'net.minecraftforge.jarjar' version '0.2.3'   // forge Jar-in-Jar dependencies
         id 'dev.kikugie.stonecutter' version '0.9.8'     // version axis (per-MC nodes)
@@ -46,9 +47,12 @@ rootProject.name = 'nerolink'
 // ---------------------------------------------------------------------------
 stonecutter {
     create(rootProject) {
-        branch('fabric')   { versions('26.1.2', '26.2', '26.3') }
-        branch('neoforge') { versions('26.1.2', '26.2', '26.3') }
-        branch('forge')    { versions('26.1.2', '26.2', '26.3') }
+        // 1.21.x: one cell per API line (1.21.8 also covers 1.21.7, 1.21.10 also covers 1.21.9 - see
+        // mc_floor_<v> / mc_ceiling_<v> in gradle.properties).
+        def mcVersions = ['1.21.1', '1.21.4', '1.21.5', '1.21.8', '1.21.10', '1.21.11', '26.1.2', '26.2', '26.3']
+        branch('fabric')   { versions(*mcVersions) }
+        branch('neoforge') { versions(*mcVersions) }
+        branch('forge')    { versions(*mcVersions) }
         vcsVersion = '26.2'   // reset point for commits / default checkout
     }
 }

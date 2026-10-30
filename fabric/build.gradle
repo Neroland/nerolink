@@ -2,13 +2,24 @@
 // module's source directly (single copy -> no drift).
 
 plugins {
-    id 'net.fabricmc.fabric-loom'
+    // Two Loom flavours from the same plugin jar: `fabric-loom` for de-obfuscated 26.x (no mappings, no
+    // remap) and `fabric-loom-remap` for obfuscated 1.21.x (Mojang mappings + remapJar to intermediary).
+    // Neither is applied here; the node picks one below from its Minecraft version.
+    id 'net.fabricmc.fabric-loom' apply false
+    id 'net.fabricmc.fabric-loom-remap' apply false
     id 'eclipse'   // for eclipse.synchronizationTasks (VS Code / Buildship import hook)
     id 'maven-publish'
 }
 
 // MC version comes from the Stonecutter node (e.g. :fabric:26.1.2), not a global property.
 def mc = stonecutter.current.version
+// Minecraft before 26.1 ships obfuscated, so those cells need mappings and a remapped jar.
+def obfuscated = mc.startsWith('1.')
+apply plugin: obfuscated ? 'net.fabricmc.fabric-loom-remap' : 'net.fabricmc.fabric-loom'
+// Minecraft range: 1.21.x cells are bounded to their API line (gradle.properties); 26.x keep >=mc.
+def mcCeiling = project.findProperty("mc_ceiling_${mc}")
+def mcFloor = project.findProperty("mc_floor_${mc}") ?: mc
+def minecraftRequirement = mcCeiling ? ">=${mcFloor} <${mcCeiling}" : ">=${mc}"
 def fabricApi = project.findProperty("fabric_api_version_${mc}")
 def jeiVersion = project.findProperty("jei_version_${mc}")
 def emiFile = project.findProperty("emi_file_fabric_${mc}")
@@ -31,7 +42,8 @@ publishing {
             groupId = rootProject.mod_group_id
             artifactId = "nerolink-fabric-${mc}"
             version = rootProject.mod_version
-            artifact tasks.named('jar')
+            // 1.21.x consumers remap NeroLink with modImplementation, so they need the intermediary jar.
+            artifact tasks.named(obfuscated ? 'remapJar' : 'jar')
         }
     }
     // Remote target so a fresh CI runner / clone (empty ~/.m2) can resolve NeroLink — GitHub Packages
@@ -58,6 +70,16 @@ sourceSets.main.resources.srcDir rootProject.ext.commonResources
 
 dependencies {
     minecraft "com.mojang:minecraft:${mc}"
+    if (obfuscated) {
+        // Obfuscated 1.21.x: Mojang's official names, remapped to intermediary on jar. Mod dependencies
+        // (loader, Fabric API, Core) go through modImplementation so Loom remaps them.
+        mappings loom.officialMojangMappings()
+        modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+        if (fabricApi != null) {
+            modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApi}"
+        }
+        modImplementation "za.co.neroland.nerolandcore:nerolandcore-fabric-${mc}:${nerolandcoreVersion}"
+    } else {
     // NOTE: no `mappings` — de-obfuscated 26.x needs none (Fabric Loom 1.17+).
     implementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
     if (fabricApi != null) {
@@ -70,11 +92,20 @@ dependencies {
     // Fabric Loader still discovers Core as a mod via its bundled fabric.mod.json. Resolved from
     // mavenLocal() (local Core publishToMavenLocal) or GitHub Packages — see stonecutter.gradle.
     implementation "za.co.neroland.nerolandcore:nerolandcore-fabric-${mc}:${nerolandcoreVersion}"
+    }
 
     // Sentry SDK (telemetry/NeroLinkTelemetry): compile against it + embed it as a jar-in-jar so the
     // shipped Fabric jar carries it. Counterpart to the NeoForge JarJar bundling.
     implementation 'io.sentry:sentry:8.60.0'
     include 'io.sentry:sentry:8.60.0'
+
+    // netty-codec-http (the bridge's HTTP + WebSocket server). Minecraft ships it from 1.21.9 on; the
+    // older 1.21.x lines do not, so those jars embed the version matching that Minecraft's own netty.
+    def nettyHttp = project.findProperty("netty_codec_http_version_${mc}")
+    if (nettyHttp) {
+        implementation "io.netty:netty-codec-http:${nettyHttp}"
+        include "io.netty:netty-codec-http:${nettyHttp}"
+    }
 
     // JEI (optional recipe-viewer compat). The shared compat/jei plugin lives in `common` and uses ONLY
     // the loader-agnostic JEI common API; on Fabric it compiles against the common + fabric APIs and loads
@@ -111,6 +142,7 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
         mod_license          : rootProject.mod_license,
         fabric_loader_version: rootProject.fabric_loader_version,
         minecraft_version    : mc,
+        minecraft_requirement: minecraftRequirement,
         // Floor the required Core version at what we compile against so the loader refuses to
         // run against a Core too old to have the APIs it references.
         nerolandcore_version : nerolandcoreVersion,
@@ -123,8 +155,20 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
 sourceSets.main.resources.srcDir generateModMetadata
 eclipse.synchronizationTasks generateModMetadata
 
+// The access widener's namespace differs by era: 26.x is `official` (de-obfuscated), 1.21.x is `named`
+// (Mojang mappings, remapped to intermediary in remapJar). Each 1.21.x line has its own file under
+// src/main/accesswidener/, swapped into the jar under the name fabric.mod.json declares.
+def awFile = obfuscated ? file("${branchDir}/src/main/accesswidener/${mc}.accesswidener")
+        : file("${branchDir}/src/main/resources/nerolink.accesswidener")
+if (obfuscated) {
+    tasks.named('processResources', ProcessResources) {
+        exclude 'nerolink.accesswidener'
+        from(awFile) { rename { 'nerolink.accesswidener' } }
+    }
+}
+
 loom {
-    accessWidenerPath = file("${branchDir}/src/main/resources/nerolink.accesswidener")
+    accessWidenerPath = awFile
 
     runs {
         client {
@@ -178,7 +222,7 @@ tasks.register('ecjCheck', JavaExec) {
                 .join(File.pathSeparator)
         def srcDirs = sourceSets.main.java.srcDirs.findAll { it.exists() }.collect { it.absolutePath }
         args = [
-                '--release', '25',
+                '--release', "${project.javaRelease}",
                 '-proc:none',
                 '-d', 'none',
                 '-properties', rootProject.file('tools/ecj.prefs').absolutePath,

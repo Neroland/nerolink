@@ -21,6 +21,41 @@ allprojects {
     version = rootProject.mod_version
 }
 
+// Mechanical renames for Minecraft lines older than the source state (the source is written for 26.x).
+// Applied, in order, to the shared common/ Java source of every node whose version is below `below`,
+// AFTER Stonecutter's own //? processing. Only for pure renames Mojang made with no behaviour change;
+// anything else uses //? if blocks in the source. Loader src/ trees do NOT get these (use //? there).
+ext.legacyRenames = [
+    // 1.21.11 renamed ResourceLocation -> Identifier and ResourceKey.location() -> identifier().
+    [below: '1.21.11', from: /\bIdentifier\b/, to: 'ResourceLocation'],
+    [below: '1.21.11', from: /\.identifier\(\)/, to: '.location()'],
+    // 26.1 renamed GuiGraphics -> GuiGraphicsExtractor and its drawString(..) -> text(..). The text()
+    // rename is keyed on the receiver names this codebase uses for the graphics object (g / graphics).
+    [below: '26.1', from: /\bGuiGraphicsExtractor\b/, to: 'GuiGraphics'],
+    // 1.21.1-1.21.4 have no SavedDataType and an abstract NBT SavedData.save(..). Core ships look-alikes
+    // in data.compat; stores are declared through data.SavedDataCompat, so only these two lines differ.
+    [below: '1.21.5', from: /import net\.minecraft\.world\.level\.saveddata\.SavedDataType;/,
+            to: 'import za.co.neroland.nerolandcore.data.compat.SavedDataType;'],
+    [below: '1.21.5', from: /(\bclass\s+\w+\s+)extends\s+SavedData\b/,
+            to: '$1extends za.co.neroland.nerolandcore.data.compat.CodecSavedData'],
+    [below: '26.1', from: /\b(g|graphics|guiGraphics)\.text\(/, to: '$1.drawString('],
+    // 1.21.2 renamed Registry.get(ResourceLocation|ResourceKey) -> getValue(..) (same arguments, same result).
+    // Keyed on BuiltInRegistries receivers so Map.Entry/BlockState getValue(..) calls are left alone.
+    [below: '1.21.2', from: /\b(BuiltInRegistries\.[A-Z_]+)\.getValue\(/, to: '$1.get('],
+    // 1.21.1-1.21.5 have no ValueInput/ValueOutput (block entities load/save a CompoundTag + registry
+    // lookup). Core ships look-alikes in data.compat; the save/load overrides themselves are //? blocks.
+    [below: '1.21.6', from: /import net\.minecraft\.world\.level\.storage\.ValueInput;/,
+            to: 'import za.co.neroland.nerolandcore.data.compat.ValueInput;'],
+    [below: '1.21.6', from: /import net\.minecraft\.world\.level\.storage\.ValueOutput;/,
+            to: 'import za.co.neroland.nerolandcore.data.compat.ValueOutput;'],
+    // Loader APIs renamed for 26.1: Fabric Transfer's ContainerStorage was InventoryStorage, the payload
+    // registries were playS2C/playC2S; Forge's ModList was an instance (ModList.get()).
+    [below: '26.1', from: /\bContainerStorage\b/, to: 'InventoryStorage'],
+    [below: '26.1', from: /PayloadTypeRegistry\.clientboundPlay\(\)/, to: 'PayloadTypeRegistry.playS2C()'],
+    [below: '26.1', from: /PayloadTypeRegistry\.serverboundPlay\(\)/, to: 'PayloadTypeRegistry.playC2S()'],
+    [below: '26.1', from: /\bModList\.(getMods|isLoaded|getModContainerById)\(/, to: 'ModList.get().$1('],
+]
+
 // Shared common source — pulled into every loader node (single copy -> no drift).
 // Dynamic, machine-independent paths (resolved from rootProject.projectDir).
 ext.commonJava = "${rootProject.projectDir}/common/src/main/java"
@@ -29,13 +64,18 @@ ext.commonResources = "${rootProject.projectDir}/common/src/main/resources"
 subprojects {
     apply plugin: 'java'
 
+    // Minecraft 1.21.x runs on Java 21, so its cells must emit Java 21 bytecode (and may not use
+    // Java 22+ language features). 26.x cells stay on Java 25. A node's project name IS its MC version.
+    def javaRelease = project.name.startsWith('1.') ? 21 : 25
+    ext.javaRelease = javaRelease
+
     java {
-        toolchain.languageVersion = JavaLanguageVersion.of(25)
+        toolchain.languageVersion = JavaLanguageVersion.of(javaRelease)
     }
 
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
-        options.release = 25
+        options.release = javaRelease
     }
 
     repositories {
@@ -88,22 +128,53 @@ subprojects {
             def raw = new File(rootProject.ext.commonJava).canonicalFile
             def outRel = 'build/generated/stonecutter-common/java'
             def outDir = node.file(outRel)
+            // Mechanical renames that apply to this node (see legacyRenames below), in order.
+            def renames = rootProject.ext.legacyRenames.findAll { sc.eval(sc.current.version, '<' + it.below) }
+            // Preprocess one shared source tree (//? blocks + mechanical renames) into a node-local copy.
+            def processTree = { File srcRoot, String dstRel ->
+                def dstRoot = node.file(dstRel)
+                node.delete(dstRoot)
+                srcRoot.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+                    def rel = srcRoot.toPath().relativize(f.toPath()).toString().replace('\\', '/')
+                    def dst = new File(dstRoot, rel)
+                    if (f.name.endsWith('.java') && f.getText('UTF-8').contains('//?')) {
+                        sc.process(f, "${dstRel}/${rel}")
+                    } else {
+                        dst.parentFile.mkdirs()
+                        dst.bytes = f.bytes
+                    }
+                    if (f.name.endsWith('.java') && !renames.isEmpty()) {
+                        def text = dst.getText('UTF-8')
+                        renames.each { r -> text = text.replaceAll(r.from, r.to) }
+                        dst.setText(text, 'UTF-8')
+                    }
+                }
+            }
             def processCommon = node.tasks.register('stonecutterProcessCommon') {
                 group = 'stonecutter'
                 description = 'Preprocesses the shared common/ Java source for this Minecraft version.'
                 inputs.dir(raw)
                 inputs.property('mc', sc.current.version)
+                inputs.property('renames', renames.collect { "${it.from}->${it.to}" }.join('|'))
                 outputs.dir(outDir)
                 doLast {
-                    node.delete(outDir)
-                    raw.eachFileRecurse(groovy.io.FileType.FILES) { f ->
-                        def rel = raw.toPath().relativize(f.toPath()).toString().replace('\\', '/')
-                        if (f.name.endsWith('.java') && f.getText('UTF-8').contains('//?')) {
-                            sc.process(f, "${outRel}/${rel}")
-                        } else {
-                            def dst = new File(outDir, rel)
-                            dst.parentFile.mkdirs()
-                            dst.bytes = f.bytes
+                    processTree(raw, outRel)
+                }
+            }
+            // The loader src/ trees are preprocessed by Stonecutter's own stonecutterGenerate task; apply the same
+            // mechanical renames to its output so loader code follows the same rules as common/.
+            def scGen = node.tasks.findByName('stonecutterGenerate')
+            if (scGen != null && !renames.isEmpty()) {
+                scGen.inputs.property('legacyRenames', renames.collect { "${it.from}->${it.to}" }.join('|'))
+                scGen.doLast {
+                    scGen.outputs.files.each { root ->
+                        if (!root.exists()) return
+                        root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+                            if (!f.name.endsWith('.java')) return
+                            def text = f.getText('UTF-8')
+                            def out = text
+                            renames.each { r -> out = out.replaceAll(r.from, r.to) }
+                            if (out != text) f.setText(out, 'UTF-8')
                         }
                     }
                 }
@@ -117,6 +188,32 @@ subprojects {
                     return node.files(outDir).builtBy(processCommon)
                 }
                 return scGenerate != null ? node.files(it).builtBy(scGenerate) : it
+            }
+            // The shared unit tests (common/src/test/java, wired into a node's test source set by its loader
+            // build script) are written against the same 26.x source state, so they get the same treatment.
+            def rawTest = new File("${rootProject.projectDir}/common/src/test/java").canonicalFile
+            def testSet = node.sourceSets.findByName('test')
+            if (testSet != null && rawTest.isDirectory() && testSet.java.srcDirs.any { it.canonicalFile == rawTest }) {
+                def testOutRel = 'build/generated/stonecutter-common/test-java'
+                def processCommonTest = node.tasks.register('stonecutterProcessCommonTest') {
+                    group = 'stonecutter'
+                    description = 'Preprocesses the shared common/ unit-test source for this Minecraft version.'
+                    inputs.dir(rawTest)
+                    inputs.property('mc', sc.current.version)
+                    inputs.property('renames', renames.collect { "${it.from}->${it.to}" }.join('|'))
+                    outputs.dir(node.file(testOutRel))
+                    doLast {
+                        processTree(rawTest, testOutRel)
+                    }
+                }
+                // As for main: keep Stonecutter's own generated test dir wired to the task that produces it.
+                def scGenerateTest = node.tasks.findByName('stonecutterGenerateTest')
+                testSet.java.srcDirs = testSet.java.srcDirs.collect {
+                    if (it.canonicalFile == rawTest) {
+                        return node.files(node.file(testOutRel)).builtBy(processCommonTest)
+                    }
+                    return scGenerateTest != null ? node.files(it).builtBy(scGenerateTest) : it
+                }
             }
         }
     }
@@ -163,6 +260,62 @@ subprojects {
             }
             // Appended last, so on a duplicate path the overlay wins over the shared common resources.
             node.sourceSets.main.resources.srcDir(node.files(outDir).builtBy(mergeResources))
+            node.tasks.named('processResources') {
+                duplicatesStrategy = DuplicatesStrategy.INCLUDE
+            }
+        }
+    }
+    // Recipe ingredients: 1.21.2 made a bare item id / "#tag" string a valid ingredient, and the source
+    // recipes use that short form. For older nodes, rewrite every data/*/recipe/*.json to the
+    // {"item": ..} / {"tag": ..} object form at build time (same files, overlaid last so they win), instead
+    // of keeping a second hand-written copy of each recipe.
+    if (isNode) {
+        afterEvaluate { node ->
+            def sc = node.extensions.findByName('stonecutter')
+            if (sc == null || !sc.eval(sc.current.version, '<1.21.2')) {
+                return
+            }
+            def base = new File(rootProject.ext.commonResources).canonicalFile
+            def outDir = node.file('build/generated/legacy-recipes')
+            def legacyRecipes = node.tasks.register('legacyRecipes') {
+                group = 'stonecutter'
+                description = 'Rewrites short-form recipe ingredients to the pre-1.21.2 object form.'
+                inputs.dir(base)
+                outputs.dir(outDir)
+                doLast {
+                    node.delete(outDir)
+                    def slurper = new groovy.json.JsonSlurper()
+                    def conv
+                    conv = { v ->
+                        if (v instanceof String) {
+                            return v.startsWith('#') ? [tag: v.substring(1)] : [item: v]
+                        }
+                        return v instanceof List ? v.collect { conv(it) } : v
+                    }
+                    base.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+                        def rel = base.toPath().relativize(f.toPath()).toString().replace('\\', '/')
+                        if (!(rel ==~ /data\/[^\/]+\/recipe\/.+\.json/)) {
+                            return
+                        }
+                        def json = slurper.parse(f)
+                        if (json.key instanceof Map) {
+                            json.key = json.key.collectEntries { k, v -> [(k): conv(v)] }
+                        }
+                        if (json.ingredients instanceof List) {
+                            json.ingredients = json.ingredients.collect { conv(it) }
+                        }
+                        ['ingredient', 'template', 'base', 'addition'].each { k ->
+                            if (json[k] != null) {
+                                json[k] = conv(json[k])
+                            }
+                        }
+                        def dst = new File(outDir, rel)
+                        dst.parentFile.mkdirs()
+                        dst.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json)), 'UTF-8')
+                    }
+                }
+            }
+            node.sourceSets.main.resources.srcDir(node.files(outDir).builtBy(legacyRecipes))
             node.tasks.named('processResources') {
                 duplicatesStrategy = DuplicatesStrategy.INCLUDE
             }

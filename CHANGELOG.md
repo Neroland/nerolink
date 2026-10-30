@@ -4,6 +4,23 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-30
+
+NeroLink now also runs on Minecraft 1.21.x, alongside the 26.x builds. Pairings, settings and the
+companion-app API are unchanged.
+
+### Added
+
+- **Minecraft 1.21.x builds.** NeroLink now builds for Minecraft 1.21.1, 1.21.4, 1.21.5, 1.21.8 (also
+  runs on 1.21.7), 1.21.10 (also runs on 1.21.9) and 1.21.11 on NeoForge, Fabric and Forge, next to
+  the 26.x jars. These builds need Java 21. Minecraft before 1.21.9 does not ship the HTTP library the
+  bridge's server uses, so the 1.21.1, 1.21.4, 1.21.5 and 1.21.8 jars include it, at the same version as
+  that Minecraft's own networking library.
+
+### Changed
+
+- Now requires Neroland Core 1.17.0 or later (below 2.0).
+
 ## [1.1.0] - 2026-10-20
 
 ### Added

@@ -12,6 +12,9 @@ plugins {
 
 // MC version comes from the Stonecutter node (e.g. :neoforge:26.1.2), not a global property.
 def mc = stonecutter.current.version
+// Minecraft range: 1.21.x cells are bounded to their API line (gradle.properties); 26.x keep [mc,).
+def mcCeiling = project.findProperty("mc_ceiling_${mc}")
+def mcFloor = project.findProperty("mc_floor_${mc}") ?: mc
 def neoVersion = project.findProperty("neo_version_${mc}")
 def jeiVersion = project.findProperty("jei_version_${mc}")
 def emiFile = project.findProperty("emi_file_neoforge_${mc}")
@@ -92,6 +95,13 @@ dependencies {
     // another mod also ships Sentry). Adds it to the compile classpath AND the mod jar.
     jarJar(implementation('io.sentry:sentry:8.60.0'))
 
+    // netty-codec-http (the bridge's HTTP + WebSocket server). Minecraft ships it from 1.21.9 on; the
+    // older 1.21.x lines do not, so those jars embed the version matching that Minecraft's own netty.
+    def nettyHttp = project.findProperty("netty_codec_http_version_${mc}")
+    if (nettyHttp) {
+        jarJar(implementation("io.netty:netty-codec-http:${nettyHttp}"))
+    }
+
     // JEI (optional recipe-viewer compat; the compat/jei plugin loads only when JEI is present). The API
     // is compile-time; the full NeoForge artifact is runtime-only (dev/test) so it is never published as a
     // hard dependency. Per-MC-version via jei_version_<mc> (BlameJared maven, inherited from the root).
@@ -133,7 +143,7 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
         mod_authors            : rootProject.mod_authors,
         mod_license            : rootProject.mod_license,
         mod_logo_entry         : modLogoEntry,
-        minecraft_version_range: "[${mc},)",
+        minecraft_version_range: mcCeiling ? "[${mcFloor},${mcCeiling})" : "[${mc},)",
         // Floor the required Core version at what we compile against so Forge refuses to
         // load against a Core too old to have the APIs it references, instead of crashing
         // at registration.
@@ -220,7 +230,7 @@ tasks.register('ecjCheck', JavaExec) {
                 .join(File.pathSeparator)
         def srcDirs = sourceSets.main.java.srcDirs.findAll { it.exists() }.collect { it.absolutePath }
         args = [
-                '--release', '25',
+                '--release', "${project.javaRelease}",
                 '-proc:none',
                 '-d', 'none',
                 '-properties', rootProject.file('tools/ecj.prefs').absolutePath,
