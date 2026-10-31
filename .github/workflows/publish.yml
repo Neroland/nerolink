@@ -293,8 +293,7 @@ jobs:
         run: |
           {
             echo "list<<EOF"
-            echo "$GAMES" | tr ',' '
-'
+            echo "$GAMES" | tr ',' '\n'
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 

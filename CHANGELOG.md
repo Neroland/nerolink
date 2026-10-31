@@ -4,7 +4,7 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-10-30
+## [1.2.1] - 2026-10-31
 
 NeroLink now also runs on Minecraft 1.21.x, alongside the 26.x builds. Pairings, settings and the
 companion-app API are unchanged.
