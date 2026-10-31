@@ -1,5 +1,7 @@
 # Project context for AI coding agents — nerolink
 
+> Modrinth is temporarily being removed from the upload and is no longer being referenced. Avoid making references to modrinth.
+
 > This and `AGENTS.md` are kept identical; update both together.
 
 ## The mod

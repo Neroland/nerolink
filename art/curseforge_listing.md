@@ -19,7 +19,7 @@ so the page is a one-time manual paste. Everything you need:
 
 ## Description body
 
-Paste `art/modrinth_description.md` (CurseForge's editor accepts the same Markdown;
+Paste `art/description.md` (CurseForge's editor accepts the same Markdown;
 double-check the emoji bullets render, strip them if not). Update the "Also on
 CurseForge" link at the bottom to point at Modrinth instead:
 `https://modrinth.com/mod/nerolink`.

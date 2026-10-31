@@ -32,7 +32,7 @@ Built on **Neroland Core**, and *only* Core: every other Neroland mod is an opti
 
 ## Why it fits the ecosystem
 
-- 🧩 **Requires only [Neroland Core](https://modrinth.com/mod/nerolandcore)** — the provider API lives in Core, so mods never depend on NeroLink and NeroLink never depends on mods.
+- 🧩 **Requires only [Neroland Core](https://nerolandmc.net/mods/neroland-core/)** — the provider API lives in Core, so mods never depend on NeroLink and NeroLink never depends on mods.
 - 📡 **Capability discovery** — clients see exactly the sections your server supports; adding a Neroland mod lights up its dashboard automatically.
 - 🧱 **Cross-loader** — NeoForge, Forge, and Fabric on Minecraft **26.1.2**, **26.2** and **26.3**.
 - 🖥️ **Server-cheap** — snapshot caching, per-token rate limits, batched WebSocket deltas, and one hibernating relay tunnel. A popular bridge must never cost you TPS.
@@ -45,7 +45,7 @@ NeroLink also includes anonymous **crash telemetry** (stack trace + mod/MC/loade
 
 ## Requirements & compatibility
 
-- **Requires [Neroland Core](https://modrinth.com/mod/nerolandcore) 1.13.0 or newer (below 2.0)** — install it alongside NeroLink (it loads first).
+- **Requires [Neroland Core](https://nerolandmc.net/mods/neroland-core/) 1.13.0 or newer (below 2.0)** — install it alongside NeroLink (it loads first).
 - Every other Neroland mod is optional and auto-discovered; no third-party mod is required or touched.
 - **Modpacks are allowed and encouraged** — any platform, no need to ask. Use the official files and credit *NeroLink by Neroland* with links to the [CurseForge page](https://www.curseforge.com/minecraft/mc-mods/nerolink) and the [GitHub repository](https://github.com/Neroland/nerolink). Full terms: [LICENSE](https://github.com/Neroland/nerolink/blob/main/LICENSE).
 

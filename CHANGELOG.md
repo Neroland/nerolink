@@ -4,6 +4,14 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-10-31
+
+### Changed
+
+- Release uploads now target CurseForge and GitHub Releases only.
+- Removed automatic project description and gallery uploads.
+- Renamed the website overview source to `art/description.md` and refreshed public documentation links.
+
 ## [1.2.1] - 2026-10-31
 
 NeroLink now also runs on Minecraft 1.21.x, alongside the 26.x builds. Pairings, settings and the
@@ -123,7 +131,7 @@ Requires **Neroland Core 1.13.0 or newer, below 2.0**.
   origin already written to `config/nerolink.properties` and their stored registration: set
   `relayOrigin` to the new host and run `/nerolink setup` again, then re-pair devices (the app URL
   changes). Dev tooling (`tools/setup_dev_relay.py`, VS Code tasks), README and wiki updated.
-- Modrinth page description links the NeroLink app beta and the ecosystem pages on
+- Store page description links the NeroLink app beta and the ecosystem pages on
   `nerolandmc.net`.
 - `maxClients` (default `64`) is now really the global cap on concurrent live-update
   (WebSocket) connections, direct and relay combined. Extra connections are closed with `1013`

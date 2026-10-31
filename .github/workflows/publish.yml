@@ -7,12 +7,11 @@ name: Publish
 #   detect  -> is there a v<mod_version> release tag yet? (read-only ledger check)
 #   build   -> build all 6 cells once; extract release notes; upload the 6 distributable
 #              jars + notes as the `dist` artifact.
-#   publish -> matrix over the 27 cells: download `dist`, upload each jar to CurseForge +
-#              Modrinth as its own version tagged with the EXACT loader + game-version (each
+#   publish -> matrix over the 27 cells: download `dist`, upload each jar to CurseForge as its own version tagged with the EXACT loader + game-version (each
 #              version self-contained, carrying its own copy of the changelog).
 #   release -> runs LAST (needs: publish): download `dist`, register the Sentry release, then
 #              create the single GitHub Release + the v<version> tag. That tag is the ledger
-#              `detect` checks, so creating it last means a failed CF/MR upload leaves NO tag
+#              `detect` checks, so creating it last means a failed CurseForge upload leaves NO tag
 #              and a re-run retries cleanly instead of being skipped.
 #
 # Re-runs are safe: an already-released version (tag exists) is skipped. `workflow_dispatch`
@@ -142,7 +141,7 @@ jobs:
 
       # Publish the 27 per-loader Maven artifacts to GitHub Packages (mirrors Neroland Core's publish.yml)
       # so downstream Nero mods can resolve NeroLink from a remote repo (CI runners + fresh clones have an
-      # empty ~/.m2). CurseForge/Modrinth/GitHub Releases carry player-facing jars, not Gradle dependencies.
+      # empty ~/.m2). CurseForge/GitHub Releases carry player-facing jars, not Gradle dependencies.
       # The jars were just built above, so `publish`'s `jar` dependency is UP-TO-DATE and this step only
       # uploads — no second build. GITHUB_TOKEN is the workflow's own token (packages: write granted above).
       # Privacy (POPIA/GDPR): only build artifacts + version strings are handled or logged.
@@ -246,7 +245,7 @@ jobs:
           retention-days: 1
 
   publish:
-    name: Publish ${{ matrix.label }} ${{ matrix.mc }} (CurseForge + Modrinth)
+    name: Publish ${{ matrix.label }} ${{ matrix.mc }} (CurseForge)
     needs: [detect, build]
     if: needs.detect.outputs.changed == 'true'
     runs-on: ubuntu-latest
@@ -295,76 +294,11 @@ jobs:
           name: dist
           path: dist
 
-      # One CurseForge/Modrinth version per cell, each tagged with its EXACT loader +
-      # game-version (so no jar is mislabelled). Each version carries its own copy of the
-      # changelog (self-contained per the chosen layout).
-      # matrix.games is a comma list (a 1.21.x cell can cover a hotfix sibling: 1.21.7+1.21.8,
-      # 1.21.9+1.21.10); mc-publish wants one version per line.
-      - name: Game versions for this cell
-        id: games
-        env:
-          GAMES: ${{ matrix.games }}
-        run: |
-          {
-            echo "list<<EOF"
-            echo "$GAMES" | tr ',' '\n'
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Publish to Modrinth
-        id: upload
-        uses: Kir-Antipov/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659 # v3.3
-        with:
-          modrinth-id: ${{ secrets.MODRINTH_PROJECT_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_API_TOKEN }}
-          name: NeroLink ${{ needs.detect.outputs.version }} - ${{ matrix.label }} ${{ matrix.mc }}
-          version: ${{ needs.detect.outputs.version }}-${{ matrix.loader }}-${{ matrix.mc }}
-          version-type: ${{ needs.build.outputs.version_type }}
-          changelog-file: dist/RELEASE_NOTES.md
-          files: dist/nerolink-${{ matrix.loader }}-${{ matrix.mc }}-${{ needs.detect.outputs.version }}${{ matrix.suffix }}.jar
-          loaders: ${{ matrix.loader }}
-          game-versions: ${{ steps.games.outputs.list }}
-          java: ${{ startsWith(matrix.mc, '1.') && '21' || '25' }}
-
-      # Tag the freshly-created Modrinth version with the per-version environment
-      # metadata from Modrinth's environments overhaul (Content Rules §5.1). mc-publish
-      # has no input for this, and the field is only writable via API v3, where
-      # `environment` is a flattened version field (see labrinth v3 versions.rs /
-      # v2_reroute.rs). NeroLink must be installed on BOTH sides (fabric.mod.json
-      # "environment": "*"), hence client_and_server — keep in sync with the v2
-      # client_side/server_side pins in modrinth-description.yml.
-      # Privacy (POPIA/GDPR): only the opaque version id is handled or logged —
-      # no personal data.
-      - name: Set Modrinth environment metadata
-        env:
-          MODRINTH_API_TOKEN: ${{ secrets.MODRINTH_API_TOKEN }}
-          VERSION_ID: ${{ steps.upload.outputs.modrinth-version }}
-        run: |
-          if [ -z "$VERSION_ID" ]; then
-            echo "::error::No Modrinth version id from the publish step; cannot set environment."
-            exit 1
-          fi
-
-          HTTP_CODE=$(curl -sS -o response.txt -w "%{http_code}" \
-            -X PATCH "https://api.modrinth.com/v3/version/${VERSION_ID}" \
-            -H "Authorization: ${MODRINTH_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -H "User-Agent: Neroland/nerolink-ci (dario@neroland.co.za)" \
-            --data '{"environment": "client_and_server"}')
-
-          if [ "$HTTP_CODE" != "204" ]; then
-            echo "::error::Modrinth v3 version API returned HTTP $HTTP_CODE"
-            cat response.txt
-            exit 1
-          fi
-          echo "Modrinth version ${VERSION_ID}: environment set to client_and_server (HTTP 204)."
-
       # CurseForge requires every Minecraft Java file to declare its environment
       # (Client / Server) from 2026-07-15 - enforced by the upload API. mc-publish
       # cannot set this field, so this jar is uploaded to CurseForge directly here,
       # with gameVersionNames carrying the Minecraft version, the loader AND both
-      # environments. NeroLink runs on BOTH sides (mirrors the Modrinth
-      # client_and_server pin above), so Client + Server are both tagged.
+      # environments. NeroLink runs on BOTH sides, so Client + Server are both tagged.
       # Privacy (POPIA/GDPR): only version strings, loader/MC names and the curated
       # changelog are sent or logged - no personal data.
       - name: Upload to CurseForge (with environment)
@@ -464,7 +398,7 @@ jobs:
           environment: ${{ needs.build.outputs.environment }}
 
       # One GitHub Release carrying all six jars. This also creates the v<version> tag that
-      # `detect` reads as the release ledger - intentionally the LAST step, so a failed CF/MR
+      # `detect` reads as the release ledger - intentionally the LAST step, so a failed CurseForge
       # upload above leaves no tag and a re-run retries cleanly instead of being skipped.
       - name: Publish GitHub Release
         uses: Kir-Antipov/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659 # v3.3
