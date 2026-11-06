@@ -85,3 +85,7 @@
 - Commit or push automatically — leave changes staged for the developer.
 - Hard-code absolute machine paths in committed files.
 - Add loader-specific code to `common/` — use the platform seams.
+
+## Translation workflow
+
+English is the source language for new and changed text. Community translations are intended to be contributed through Weblate; other-language translations are not required when implementing a feature. Preserve existing translations. This supersedes older instructions that require translating every change.
