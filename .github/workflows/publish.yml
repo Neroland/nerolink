@@ -144,17 +144,39 @@ jobs:
       # empty ~/.m2). CurseForge/GitHub Releases carry player-facing jars, not Gradle dependencies.
       # The jars were just built above, so `publish`'s `jar` dependency is UP-TO-DATE and this step only
       # uploads — no second build. GITHUB_TOKEN is the workflow's own token (packages: write granted above).
+      #
+      # Idempotent: GitHub Packages rejects re-uploading an existing version with HTTP 409, and the
+      # v<version> tag is only cut at the very end of the pipeline - so a run that failed AFTER this step
+      # (e.g. on CurseForge) would otherwise fail here forever on retry. Each cell's jar is probed first and
+      # cells already published at this version are skipped.
       # Privacy (POPIA/GDPR): only build artifacts + version strings are handled or logged.
       - name: Publish Maven artifacts to GitHub Packages
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          ./gradlew
-          :fabric:1.21.1:publish :fabric:1.21.4:publish :fabric:1.21.5:publish :fabric:1.21.8:publish :fabric:1.21.10:publish :fabric:1.21.11:publish :fabric:26.1.2:publish :fabric:26.2:publish :fabric:26.3:publish
-          :neoforge:1.21.1:publish :neoforge:1.21.4:publish :neoforge:1.21.5:publish :neoforge:1.21.8:publish :neoforge:1.21.10:publish :neoforge:1.21.11:publish :neoforge:26.1.2:publish :neoforge:26.2:publish :neoforge:26.3:publish
-          :forge:1.21.1:publish :forge:1.21.4:publish :forge:1.21.5:publish :forge:1.21.8:publish :forge:1.21.10:publish :forge:1.21.11:publish :forge:26.1.2:publish :forge:26.2:publish :forge:26.3:publish
-          --stacktrace
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          GROUP_PATH="$(grep -E '^mod_group_id=' gradle.properties | head -n1 | cut -d= -f2 | tr -d '[:space:]' | tr '.' '/')"
+          BASE="https://maven.pkg.github.com/${GITHUB_REPOSITORY}/${GROUP_PATH}"
+          TASKS=()
+          for loader in fabric neoforge forge; do
+            for mc in 1.21.1 1.21.4 1.21.5 1.21.8 1.21.10 1.21.11 26.1.2 26.2 26.3; do
+              ART="nerolink-${loader}-${mc}"
+              CODE=$(curl -sS -o /dev/null -w "%{http_code}" -u "${GITHUB_ACTOR}:${GITHUB_TOKEN}" \
+                "${BASE}/${ART}/${VERSION}/${ART}-${VERSION}.jar" || echo "000")
+              if [ "$CODE" = "200" ]; then
+                echo "${ART} ${VERSION} already in GitHub Packages; skipping."
+              else
+                TASKS+=(":${loader}:${mc}:publish")
+              fi
+            done
+          done
+          if [ ${#TASKS[@]} -eq 0 ]; then
+            echo "All 27 cells already published at ${VERSION}; nothing to upload."
+            exit 0
+          fi
+          echo "Publishing ${#TASKS[@]} cell(s): ${TASKS[*]}"
+          ./gradlew "${TASKS[@]}" --stacktrace
 
       # Release channel from the version suffix: -alpha -> alpha, -beta -> beta, else release.
       # Used by Sentry (environment) and the publish targets (version-type). NeroLinkTelemetry
