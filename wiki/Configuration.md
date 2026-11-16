@@ -19,6 +19,8 @@ world).
 | `tlsEnabled` | `true` | restart | Encrypt the direct listener with the bridge's self-signed certificate (`config/nerolink/bridge-tls.p12`), which the app pins at pairing. The NeroLink app's direct mode requires it; `false` is for local tooling only, and plain HTTP is refused unless `bindAddress` is `127.0.0.1`. |
 | `singleplayerLanAccess` | `false` | restart | Let phones on your network reach the bridge while you play single-player. Off by default, so a single-player world never opens a network port on its own. |
 | `rateLimitPerMinute` | `60` | live | Per-token REST budget per rolling minute (`1`–`6000`). On breach: `429` + `retryAfterMs`. |
+| `bulkSnapshotRoutes` | `neromaps/tiles` | live | Comma-separated `module/section` snapshot routes charged to a separate per-device bulk budget instead of `rateLimitPerMinute`, so bulk data such as map tiles never drains the budget other modules share. Empty = one shared budget for everything. |
+| `bulkRateLimitPerMinute` | `30` | live | Per-device budget per rolling minute for the `bulkSnapshotRoutes` (`1`–`600`). On breach: `429` + `retryAfterMs`. |
 | `maxClients` | `64` | live | Global cap on concurrent live-update (WebSocket) connections, direct + relay (`1`–`4096`). Extra connections are closed with `1013` (direct) / `4503` (relay) "server busy". |
 | `maxDevicesPerPlayer` | `5` | live | How many devices one player may pair at once (`1`–`64`). Pairing past the cap returns `429` "device limit reached"; revoke one with `/nerolink revoke`. |
 | `tokenExpiryDays` | `90` | live | Device tokens expire after this many days of inactivity (`1`–`3650`). Expired devices are deleted by a sweep at bridge start and every 6 hours; every token also has an absolute lifetime of 365 days. |

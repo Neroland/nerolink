@@ -64,6 +64,16 @@ public final class NeroLinkConfig {
             "rateLimitPerMinute", 60, 1, 6000, true,
             "Per-token REST request budget per rolling minute. 429 + retryAfterMs on breach.");
 
+    public static final ConfigValue<String> BULK_SNAPSHOT_ROUTES = SCHEMA.string(
+            "bulkSnapshotRoutes", "neromaps/tiles", true,
+            "Comma-separated module/section snapshot routes charged to a separate per-device bulk budget "
+                    + "(bulkRateLimitPerMinute) instead of rateLimitPerMinute, so bulk data such as map tiles "
+                    + "never drains the budget other modules share. Empty = every request shares one budget.");
+
+    public static final ConfigValue<Integer> BULK_RATE_LIMIT_PER_MINUTE = SCHEMA.intRange(
+            "bulkRateLimitPerMinute", 30, 1, 600, true,
+            "Per-device budget per rolling minute for the bulkSnapshotRoutes. 429 + retryAfterMs on breach.");
+
     public static final ConfigValue<Integer> MAX_CLIENTS = SCHEMA.intRange(
             "maxClients", 64, 1, 4096, true,
             "Global cap on concurrent live-update (WebSocket) connections, direct + relay. "
@@ -156,6 +166,18 @@ public final class NeroLinkConfig {
     }
 
     /** Parsed, lower-cased set of globally disabled {@code module/action} ids. */
+    /** The {@link #BULK_SNAPSHOT_ROUTES} ids, trimmed and lower-cased. */
+    public static List<String> bulkSnapshotRoutes() {
+        String raw = BULK_SNAPSHOT_ROUTES.get();
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(raw.split(","))
+                .map(s -> s.trim().toLowerCase(Locale.ROOT))
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
     public static List<String> actionsDisabled() {
         String raw = ACTIONS_DISABLED.get();
         if (raw == null || raw.isBlank()) {

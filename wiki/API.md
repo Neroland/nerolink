@@ -816,6 +816,10 @@ Relay-only: `BRIDGE_OFFLINE` (503) and `BRIDGE_TIMEOUT` (504), described above.
 - **Per-token REST budget:** `rateLimitPerMinute` (default `60`) requests per rolling
   minute, token-bucket. On breach: `429 RATE_LIMITED` with `retryAfterMs`. WebSocket
   control frames count against the same budget.
+- **Bulk snapshot budget:** `GET` snapshots of the routes in `bulkSnapshotRoutes` (default
+  `neromaps/tiles`) are charged to a second per-device bucket, `bulkRateLimitPerMinute`
+  (default `30`), **instead of** the shared one, so map tiles cannot starve other modules.
+  Same `429 RATE_LIMITED` + `retryAfterMs` on breach.
 - **Devices per player:** `maxDevicesPerPlayer` (default `5`); a new pairing past the cap
   returns `409 VALIDATION` ("device limit reached; revoke one with /nerolink devices and /nerolink revoke").
 - **Live connections:** `maxClients` (default `64`) concurrent WebSockets, direct + relay.

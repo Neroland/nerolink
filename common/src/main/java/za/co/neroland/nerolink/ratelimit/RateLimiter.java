@@ -41,7 +41,19 @@ public final class RateLimiter {
      * @return an {@link Decision}; if not allowed, {@code retryAfterMs} is how long until a token frees.
      */
     public Decision check(String key) {
-        int perMinute = NeroLinkConfig.RATE_LIMIT_PER_MINUTE.get();
+        return check(key, NeroLinkConfig.RATE_LIMIT_PER_MINUTE.get());
+    }
+
+    /**
+     * Charge one request against the bucket under {@code key} with a {@code perMinute} budget. Used
+     * for the per-device bulk bucket ({@link RequestBudget}); callers pick a key that never collides
+     * with a plain device id, so the shared bucket is untouched.
+     *
+     * @param key       bucket key
+     * @param perMinute budget per rolling minute (at least 1)
+     */
+    public Decision check(String key, int perMinute) {
+        perMinute = Math.max(1, perMinute);
         double capacity = perMinute;
         double refillPerNano = perMinute / 60_000_000_000.0; // tokens per nanosecond
 
@@ -72,9 +84,10 @@ public final class RateLimiter {
         });
     }
 
-    /** Drop a token's bucket (on revoke). */
+    /** Drop a token's buckets (on revoke): the shared one and its bulk bucket. */
     public void forget(String key) {
         buckets.remove(key);
+        buckets.remove(RequestBudget.bulkKey(key));
     }
 
     /** Clear all buckets (on bridge stop). */

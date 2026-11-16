@@ -26,6 +26,7 @@ import za.co.neroland.nerolink.http.ApiErrors;
 import za.co.neroland.nerolink.http.ApiRequest;
 import za.co.neroland.nerolink.http.ApiResponse;
 import za.co.neroland.nerolink.prefs.PrefsStore;
+import za.co.neroland.nerolink.ratelimit.RequestBudget;
 
 /**
  * Routes a decoded {@link ApiRequest} to the right handler and returns a
@@ -88,7 +89,10 @@ public final class ApiDispatcher {
             UUID player = device.player();
 
             // --- rate limit ----------------------------------------------------------
-            var decision = bridge.rateLimiter().check(device.deviceId());
+            // Bulk snapshot routes (map tiles) draw from their own per-device bucket instead.
+            var decision = RequestBudget.charge(bridge.rateLimiter(), method, seg, device.deviceId(),
+                    NeroLinkConfig.bulkSnapshotRoutes(), NeroLinkConfig.RATE_LIMIT_PER_MINUTE.get(),
+                    NeroLinkConfig.BULK_RATE_LIMIT_PER_MINUTE.get());
             if (!decision.allowed()) {
                 return completed(ApiResponse.error(429, ApiErrors.RATE_LIMITED,
                         "rate limit exceeded", decision.retryAfterMs()));

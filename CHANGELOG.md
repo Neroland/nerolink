@@ -4,6 +4,15 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-16
+
+### Added
+
+- A second per-device rate-limit bucket for bulk snapshot routes: `bulkSnapshotRoutes` (default
+  `neromaps/tiles`) are charged to `bulkRateLimitPerMinute` (default 30) instead of the shared
+  `rateLimitPerMinute`, so map tile traffic can never drain the budget other modules share.
+  Existing routes and buckets are unchanged.
+
 ### Dependencies
 
 - Updated Neroland Core from 1.17.0 to 1.17.6.

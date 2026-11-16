@@ -94,6 +94,8 @@ Config lives in Core's config system as `nerolink.properties` (reloadable with
 | `tlsEnabled` | `true` | TLS on the direct listener; plain HTTP only allowed on `127.0.0.1` |
 | `singleplayerLanAccess` | `false` | Let single-player worlds bind the network (else `127.0.0.1`) |
 | `rateLimitPerMinute` | `60` | Per-token REST budget per minute |
+| `bulkSnapshotRoutes` | `neromaps/tiles` | Snapshot routes charged to the separate bulk budget |
+| `bulkRateLimitPerMinute` | `30` | Per-device bulk budget per minute (map tiles) |
 | `maxClients` | `64` | Global cap on live-update (WebSocket) connections |
 | `maxDevicesPerPlayer` | `5` | Devices one player may pair at once (`1`–`64`) |
 | `tokenExpiryDays` | `90` | Inactivity expiry; expired devices deleted by a 6-hourly sweep |
