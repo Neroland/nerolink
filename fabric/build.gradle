@@ -96,8 +96,8 @@ dependencies {
 
     // Sentry SDK (telemetry/NeroLinkTelemetry): compile against it + embed it as a jar-in-jar so the
     // shipped Fabric jar carries it. Counterpart to the NeoForge JarJar bundling.
-    implementation 'io.sentry:sentry:8.60.0'
-    include 'io.sentry:sentry:8.60.0'
+    implementation 'io.sentry:sentry:8.64.0'
+    include 'io.sentry:sentry:8.64.0'
 
     // netty-codec-http (the bridge's HTTP + WebSocket server). Minecraft ships it from 1.21.9 on; the
     // older 1.21.x lines do not, so those jars embed the version matching that Minecraft's own netty.

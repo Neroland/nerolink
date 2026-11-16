@@ -14,7 +14,7 @@ pluginManagement {
         id 'net.fabricmc.fabric-loom-remap' version '1.18.4' // fabric on obfuscated 1.21.x (Mojang mappings + remapJar)
         id 'net.minecraftforge.gradle' version '7.0.40'  // forge — FG 7 handles de-obf 26.x
         id 'net.minecraftforge.jarjar' version '0.2.3'   // forge Jar-in-Jar dependencies
-        id 'dev.kikugie.stonecutter' version '0.9.8'     // version axis (per-MC nodes)
+        id 'dev.kikugie.stonecutter' version '0.10'     // version axis (per-MC nodes)
     }
 }
 

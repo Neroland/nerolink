@@ -4,6 +4,29 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+### Dependencies
+
+- Updated Neroland Core from 1.17.0 to 1.17.6.
+- Updated Fabric Loader from 0.19.5 to 0.20.1.
+- Updated Fabric API (Minecraft 1.21.1) from 0.116.17+1.21.1 to 0.116.18+1.21.1.
+- Updated Fabric API (Minecraft 26.3) from 0.162.0+26.3 to 0.166.2+26.3.
+- Updated NeoForge (Minecraft 1.21.1) from 21.1.265 to 21.1.266.
+- Updated NeoForge (Minecraft 26.1.2) from 26.1.2.116 to 26.1.2.126.
+- Updated NeoForge (Minecraft 26.2) from 26.2.0.90 to 26.2.0.93.
+- Updated NeoForge (Minecraft 26.3) from 26.3.0.76 to 26.3.0.103.
+- Updated Forge (Minecraft 1.21.1) from 1.21.1-52.1.20 to 1.21.1-52.1.21.
+- Updated Forge (Minecraft 1.21.11) from 1.21.11-61.2.4 to 1.21.11-61.2.5.
+- Updated Forge (Minecraft 26.1.2) from 26.1.2-64.1.4 to 26.1.2-64.1.6.
+- Updated Forge (Minecraft 26.2) from 26.2-65.1.4 to 26.2-65.1.6.
+- Updated Forge (Minecraft 26.3) from 26.3-66.0.11 to 26.3-66.1.8.
+- Updated JEI (Minecraft 26.1.2) from 29.47.0.109 to 29.53.0.115.
+- Updated JEI (Minecraft 26.2) from 30.42.0.236 to 30.48.0.244.
+- Updated JEI (Minecraft 26.3) from 31.12.0.65 to 31.17.0.113.
+- Updated the EMI port for Minecraft 26.3 to build+62 on Fabric and NeoForge.
+- Updated Stonecutter from 0.9.8 to 0.10.
+- Updated the Gradle distribution from 9.8.1 to 9.9.1.
+- Updated the Sentry Java SDK from 8.60.0 to 8.64.0.
+
 ## [1.2.2] - 2026-10-31
 
 ### Changed

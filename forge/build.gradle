@@ -114,7 +114,7 @@ dependencies {
     // mavenLocal() (local Core publishToMavenLocal) or GitHub Packages — see stonecutter.gradle.
     implementation "za.co.neroland.nerolandcore:nerolandcore-forge-${mc}:${nerolandcoreVersion}"
 
-    implementation 'io.sentry:sentry:8.60.0'
+    implementation 'io.sentry:sentry:8.64.0'
     jarJar(group: 'io.sentry', name: 'sentry', version: '8.45.0')
 
     // netty-codec-http (the bridge's HTTP + WebSocket server). Minecraft ships it from 1.21.9 on; the
