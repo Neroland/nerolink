@@ -132,10 +132,10 @@ jobs:
             else
               status=${PIPESTATUS[0]}
             fi
-            if [ "$attempt" -eq 3 ] || ! grep -Eq 'java\.net\.http\.Http(Connect)?TimeoutException|java\.net\.SocketTimeoutException' "$log"; then
+            if [ "$attempt" -eq 3 ] || ! grep -Eq 'java\.net\.http\.Http(Connect)?TimeoutException|java\.net\.SocketTimeoutException|java\.(net\.SocketException|io\.IOException): Connection reset' "$log"; then
               exit "$status"
             fi
-            echo "::warning::Dependency download timed out (attempt $attempt/3); retrying in 15s."
+            echo "::warning::Dependency download interrupted (attempt $attempt/3); retrying in 15s."
             sleep 15
           done
 
