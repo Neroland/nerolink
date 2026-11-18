@@ -12,14 +12,18 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforgespi.language.IModInfo;
+
+import net.minecraft.server.level.ServerPlayer;
 
 import za.co.neroland.nerolink.NeroLinkBridge;
 import za.co.neroland.nerolink.NeroLinkCommon;
 import za.co.neroland.nerolink.command.NeroLinkCommand;
 import za.co.neroland.nerolink.platform.InstalledMods;
+import za.co.neroland.nerolink.setup.SetupReminder;
 import za.co.neroland.nerolink.telemetry.NeroLinkTelemetry;
 
 /**
@@ -48,6 +52,11 @@ public final class NeroLinkNeoForge {
                 NeroLinkBridge.start(event.getServer()));
         NeoForge.EVENT_BUS.addListener((ServerStoppingEvent event) ->
                 NeroLinkBridge.stop());
+        NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
+            if (event.getEntity() instanceof ServerPlayer player) {
+                SetupReminder.onPlayerJoin(player);
+            }
+        });
     }
 
     /**

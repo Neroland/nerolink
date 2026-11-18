@@ -56,6 +56,11 @@ public final class NeroLinkCommand {
         *///?}
     }
 
+    /** Whether this player may run the op-only {@code /nerolink setup} (same check the command uses). */
+    public static boolean canRunSetup(ServerPlayer player) {
+        return gamemasters().test(player.createCommandSourceStack());
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("nerolink")
                 .then(Commands.literal("pair").executes(NeroLinkCommand::pair))

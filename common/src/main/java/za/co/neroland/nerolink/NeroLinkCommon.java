@@ -90,6 +90,7 @@ public final class NeroLinkCommon {
             SavedDataRecovery.backupNow(server.overworld(), za.co.neroland.nerolink.relay.RelaySettings.TYPE,
                     relay, za.co.neroland.nerolink.relay.RelaySettings.ID.toString());
         }
+        za.co.neroland.nerolink.setup.SetupReminder.forget(uuid);
         NeroLinkBridge bridge = NeroLinkBridge.instance();
         if (bridge != null) {
             bridge.pairing().forget(uuid);

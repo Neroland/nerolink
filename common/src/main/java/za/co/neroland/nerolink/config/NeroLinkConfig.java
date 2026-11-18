@@ -128,6 +128,13 @@ public final class NeroLinkConfig {
                     + "Blank = use the /nerolink setup registration instead. Set BOTH relayUrl and relayKey "
                     + "to override the stored setup credentials; otherwise leave blank and use /nerolink setup.");
 
+    public static final ConfigValue<Boolean> SETUP_REMINDER = SCHEMA.bool(
+            "setupReminder", true, true,
+            "While no relay is registered, greet joining players once per server run (or world load): "
+                    + "operators are told to run /nerolink setup; players who cannot run it are told, only when "
+                    + "they could not pair at all, to ask an admin (server) or how to switch it on (single-player). "
+                    + "Set false if you run direct mode only on purpose.");
+
     public static final ConfigValue<String> PRIVACY_NOTICE_TEXT = SCHEMA.string(
             "privacyNoticeText",
             "This server's NeroLink bridge stores, keyed to your Minecraft account: a hashed "

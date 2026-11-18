@@ -4,6 +4,17 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-18
+
+### Added
+
+- A welcome message for servers and single-player worlds where NeroLink is installed but
+  `/nerolink setup` has never been run. Operators are told the command when they join; other
+  players are told to ask an admin, and only when they could not pair a device at all; a
+  single-player host without cheats is also pointed at `singleplayerLanAccess`. Each player
+  sees it once per server run, it stops once a relay is registered, and `setupReminder=false`
+  turns it off.
+
 ## [1.3.0] - 2026-11-16
 
 ### Added

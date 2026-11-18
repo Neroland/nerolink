@@ -8,6 +8,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.ModMetadata;
@@ -16,6 +17,7 @@ import za.co.neroland.nerolink.NeroLinkBridge;
 import za.co.neroland.nerolink.NeroLinkCommon;
 import za.co.neroland.nerolink.command.NeroLinkCommand;
 import za.co.neroland.nerolink.platform.InstalledMods;
+import za.co.neroland.nerolink.setup.SetupReminder;
 import za.co.neroland.nerolink.telemetry.NeroLinkTelemetry;
 
 /**
@@ -39,6 +41,8 @@ public final class NeroLinkFabric implements ModInitializer {
 
         ServerLifecycleEvents.SERVER_STARTED.register(NeroLinkBridge::start);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> NeroLinkBridge.stop());
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
+                SetupReminder.onPlayerJoin(handler.getPlayer()));
     }
 
     /**

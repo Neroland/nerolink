@@ -233,6 +233,7 @@ public final class NeroLinkBridge {
     public static synchronized void stop() {
         NeroLinkBridge bridge = instance;
         instance = null;
+        za.co.neroland.nerolink.setup.SetupReminder.reset();
         if (bridge == null) {
             return;
         }

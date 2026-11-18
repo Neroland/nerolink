@@ -67,6 +67,12 @@ A server behind NAT can still serve companion clients through the **NeroLink rel
 bridge dials *out* and holds one WebSocket tunnel; phones connect to the relay; the relay
 marries the two. No port forwarding, no public IP.
 
+Until that has been done, NeroLink greets joining players once per server run (or world
+load): operators are told to run `/nerolink setup`, and other players are told to ask an
+admin if they could not pair a device at all. In a single-player world without cheats the
+message also points at `singleplayerLanAccess`. Turn it off with `setupReminder=false`
+(see [Configuration](Configuration.md)).
+
 An operator sets it up **once**:
 
 ```

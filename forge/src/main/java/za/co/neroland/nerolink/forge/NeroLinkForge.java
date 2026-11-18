@@ -6,6 +6,7 @@ import java.util.Locale;
 
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 //? if <1.21.6 {
@@ -17,10 +18,13 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.forgespi.language.IModInfo;
 
+import net.minecraft.server.level.ServerPlayer;
+
 import za.co.neroland.nerolink.NeroLinkBridge;
 import za.co.neroland.nerolink.NeroLinkCommon;
 import za.co.neroland.nerolink.command.NeroLinkCommand;
 import za.co.neroland.nerolink.platform.InstalledMods;
+import za.co.neroland.nerolink.setup.SetupReminder;
 import za.co.neroland.nerolink.telemetry.NeroLinkTelemetry;
 
 /**
@@ -42,12 +46,22 @@ public final class NeroLinkForge {
         RegisterCommandsEvent.BUS.addListener(event -> NeroLinkCommand.register(event.getDispatcher()));
         ServerStartedEvent.BUS.addListener(event -> NeroLinkBridge.start(event.getServer()));
         ServerStoppingEvent.BUS.addListener(event -> NeroLinkBridge.stop());
+        PlayerEvent.PlayerLoggedInEvent.BUS.addListener(event -> {
+            if (event.getEntity() instanceof ServerPlayer player) {
+                SetupReminder.onPlayerJoin(player);
+            }
+        });
         //?} else {
         /*// Forge before 1.21.6 (EventBus 6) has one game event bus instead of per-event buses.
         MinecraftForge.EVENT_BUS.addListener((RegisterCommandsEvent event) ->
                 NeroLinkCommand.register(event.getDispatcher()));
         MinecraftForge.EVENT_BUS.addListener((ServerStartedEvent event) -> NeroLinkBridge.start(event.getServer()));
         MinecraftForge.EVENT_BUS.addListener((ServerStoppingEvent event) -> NeroLinkBridge.stop());
+        MinecraftForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
+            if (event.getEntity() instanceof ServerPlayer player) {
+                SetupReminder.onPlayerJoin(player);
+            }
+        });
         *///?}
     }
 

@@ -32,6 +32,7 @@ world).
 | `relayOrigin` | `https://relay.nerolandmc.net` | live | Relay base origin used by `/nerolink setup` to register this server. `setup` posts to `<origin>/register`. |
 | `relayUrl` | *(empty)* | restart | **Advanced manual override** — relay tunnel URL, e.g. `wss://relay.nerolandmc.net/tunnel/<serverId>`. Blank = use the `/nerolink setup` registration. |
 | `relayKey` | *(empty)* | restart | **Advanced manual override** — server key paired with `relayUrl`. **Keep secret; never logged.** Blank = use the `/nerolink setup` registration. |
+| `setupReminder` | `true` | live | While no relay is registered, greet joining players once per server run (or world load): operators are told to run `/nerolink setup`; players who cannot run it are told, only when they could not pair at all, to ask an admin (server) or how to switch it on (single-player). Set `false` if you run direct mode only on purpose. |
 | `privacyNoticeText` | *(a data-processing notice)* | live | Text returned by `GET /privacy/notice` and shown at first pairing. The default lists everything stored — hashed device token, the device name you enter, pairing and last-connected times, notification preferences — says devices you stop using are deleted automatically, that export/delete is in the app, and that relay traffic passes through without its content being stored. |
 | `telemetryEnabled` | `true` | live | Anonymous crash reporting (Sentry, EU ingest). Client-local opt-out — never synced. Set `false` to opt out. See [Privacy](Privacy.md). |
 
