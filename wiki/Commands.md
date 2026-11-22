@@ -18,9 +18,15 @@ sub-commands require permission **level 2** (game-master / op).
 Mints a **single-use pairing code** and whispers it — and only it — to the running player.
 Nothing is broadcast or logged. The whisper contains:
 
-- **Pairing code** — format `XXXX-XXXX`, bold/gold. **Valid for 5 minutes, single-use.**
-- **Server ID** — shown only when a relay registration is active; this is what players
-  enter in the app alongside the code.
+- **Link code** — shown when a relay registration is active: the Server ID and the pairing
+  code in one (`K7Q2MX-ABCD-EFGH`), bold/gold. This is the only thing players type into the
+  app. A second, dimmed line repeats the Server ID and the bare pairing code for older app
+  versions that ask for them separately.
+- **Pairing code** — format `XXXX-XXXX`, bold/gold, shown instead of the link code when no
+  relay is active (or for an old UUID-style registration, together with its **Server ID**).
+  **Valid for 5 minutes, single-use** — and so is the link code, which contains it.
+- **Relay address** — only for a self-hosted relay, which players have to enter in the
+  app's relay address field.
 - **Direct address** — `host:port` for direct mode (the first site-local IPv4 and the
   configured `port`), tagged `(same network - NOT the 'open to LAN' game port)`. Shown only
   when direct mode is reachable from the network (not when bound to `127.0.0.1`).

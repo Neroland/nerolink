@@ -62,6 +62,9 @@ public final class NeroLinkCommon {
      */
     private static void registerErasure() {
         PlayerDataErasure.register(NeroLinkCommon::eraseBridgeData);
+        // The read-side twin for Core's /neroland data exportme: devices (names and times only) and prefs.
+        za.co.neroland.nerolandcore.data.PlayerDataExport.register(MOD_ID,
+                za.co.neroland.nerolink.privacy.NeroLinkDataExport::export);
     }
 
     /**

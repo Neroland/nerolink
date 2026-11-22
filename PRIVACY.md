@@ -67,6 +67,12 @@ NeroLink registers with Neroland Core's shared data-erasure hook
 tokens, preferences, and pending codes together with every other Neroland mod's data,
 and sends a tombstone that drops any relay-held push tokens.
 
+NeroLink also registers with Core's export (`data.PlayerDataExport`), so
+`/neroland data exportme` includes NeroLink's part of your data: how many devices you have
+paired, the name you gave each one, when it was paired and last seen, and your notification
+preferences. It never includes token hashes, device ids or your UUID, and nothing is written
+to disk or logged.
+
 From a companion client, a player can export their bridge-held data as JSON and use
 "Delete my NeroLink data". That deletion is **bridge-scoped**: it erases NeroLink's own
 data (device tokens, preferences, pending pairing code, live connections, relay push
@@ -95,7 +101,7 @@ The bridge includes optional, anonymous **crash reporting** via Sentry on EU ser
   loader, OS, and Java versions — never tokens, pairing codes, relay keys, notification
   preferences, or world data.
 - **Bounded volume.** Per-session de-duplication and a hard cap of 10 events per session.
-- **Known limitation:** NeroLink reports through the global Sentry client shared with the
-  other Neroland mods.
+- **Own client.** NeroLink reports through its own isolated Sentry client, never the global
+  one, so another mod starting Sentry cannot silence or receive NeroLink's reports.
 
 Questions: **info@neroland.co.za**.

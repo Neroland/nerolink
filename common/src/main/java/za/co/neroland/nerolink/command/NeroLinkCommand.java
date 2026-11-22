@@ -21,6 +21,7 @@ import za.co.neroland.nerolandcore.link.LinkModuleInfo;
 import za.co.neroland.nerolandcore.link.NeroLinkRegistry;
 import za.co.neroland.nerolink.NeroLinkBridge;
 import za.co.neroland.nerolink.NeroLinkCommon;
+import za.co.neroland.nerolink.auth.LinkCode;
 import za.co.neroland.nerolink.auth.TokenStore;
 import za.co.neroland.nerolink.config.NeroLinkConfig;
 import za.co.neroland.nerolink.relay.RelayRegistrar;
@@ -31,7 +32,8 @@ import za.co.neroland.nerolink.relay.RelaySettings;
  * every loader (each loader just calls {@link #register(CommandDispatcher)} from its command
  * event). Sub-commands:
  * <ul>
- *   <li>{@code pair} — mint a pairing code and whisper it to the running player only.</li>
+ *   <li>{@code pair} — mint a pairing code and whisper it to the running player only; with a
+ *       relay it is shown as one link code that carries the Server ID ({@link LinkCode}).</li>
  *   <li>{@code devices} — list your paired devices (names + last-seen, never tokens).</li>
  *   <li>{@code revoke <device>} — revoke one of your devices by id.</li>
  *   <li>{@code status} — op-only bridge status (client counts + module list + Server ID).</li>
@@ -94,19 +96,47 @@ public final class NeroLinkCommand {
         }
         String code = NeroLinkBridge.instance().pairing().issue(player.getUUID());
         MinecraftServer server = ctx.getSource().getServer();
-        // Whisper the code to this player only.
-        player.sendSystemMessage(Component.empty()
-                .append(Component.literal("[NeroLink] ").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal("Pairing code: ").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(code).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)));
-        // If a relay registration is active, the Server ID is what players enter in the app —
-        // show it prominently, before the LAN address (which only direct-mode clients need).
         Optional<String> serverId = activeServerId(server);
-        serverId.ifPresent(id -> player.sendSystemMessage(Component.empty()
-                .append(Component.literal("Server ID: ").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(id).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
-                .append(Component.literal("  (enter this + the code in the app)")
-                        .withStyle(ChatFormatting.DARK_GRAY))));
+        // With a relay, the Server ID and the code travel as one link code: the only thing the
+        // player types into the app. Legacy UUID registrations cannot be carried in one.
+        Optional<String> linkCode = serverId.flatMap(id -> LinkCode.compose(id, code));
+        // Whisper to this player only.
+        if (linkCode.isPresent()) {
+            player.sendSystemMessage(Component.empty()
+                    .append(Component.literal("[NeroLink] ").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal("Link code: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(linkCode.get()).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
+                    .append(Component.literal("  (enter this in the app)").withStyle(ChatFormatting.DARK_GRAY)));
+            // Older apps take the Server ID and the code in two fields and cannot read a link code.
+            player.sendSystemMessage(Component.literal(
+                    "Older app? Server ID " + serverId.get().toUpperCase(java.util.Locale.ROOT)
+                            + " + pairing code " + code + ".")
+                    .withStyle(ChatFormatting.DARK_GRAY));
+        } else {
+            player.sendSystemMessage(Component.empty()
+                    .append(Component.literal("[NeroLink] ").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal("Pairing code: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(code).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)));
+            // A relay registration the link code cannot carry: the Server ID still goes to the app,
+            // shown prominently, before the LAN address (which only direct-mode clients need).
+            serverId.ifPresent(id -> player.sendSystemMessage(Component.empty()
+                    .append(Component.literal("Server ID: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(id).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
+                    .append(Component.literal("  (enter this + the code in the app)")
+                            .withStyle(ChatFormatting.DARK_GRAY))));
+        }
+        // A self-hosted relay is not the app's default, so the player has to enter its address too.
+        RelaySettings relay = RelaySettings.get(server);
+        if (serverId.isPresent() && relay.isRegistered()) {
+            String origin = relay.relayOrigin();
+            if (!LinkCode.isOfficialRelay(origin)) {
+                player.sendSystemMessage(Component.empty()
+                        .append(Component.literal("Relay address: ").withStyle(ChatFormatting.GRAY))
+                        .append(Component.literal(origin).withStyle(ChatFormatting.AQUA))
+                        .append(Component.literal("  (set this in the app's relay address field)")
+                                .withStyle(ChatFormatting.DARK_GRAY)));
+            }
+        }
         NeroLinkBridge.DirectEndpoint direct = NeroLinkBridge.instance().direct();
         if (direct.running() && !direct.loopbackOnly()) {
             player.sendSystemMessage(Component.empty()

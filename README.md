@@ -70,10 +70,11 @@ across via `server.execute(...)`.
 
 ## Pairing quickstart
 
-1. In-game: `/nerolink pair` → note the whispered `XXXX-XXXX` code, and the
-   Server ID (relay) or Direct address and Security code (direct mode).
-2. In your companion client: enter the Server ID, or the direct address
-   (`host:25580` by default), and the code. In direct mode, check the Security
+1. In-game: `/nerolink pair` → note the whispered link code (relay, e.g.
+   `K7Q2MX-ABCD-EFGH`), or the `XXXX-XXXX` code, Direct address and Security code
+   (direct mode).
+2. In your companion client: enter the link code, or the direct address
+   (`host:25580` by default) and the code. In direct mode, check the Security
    code the app shows matches the one in chat.
 3. The client stores the returned token securely and uses
    `Authorization: Bearer <token>` on every call.
@@ -169,9 +170,9 @@ run at once.
      `/nerolink setup force` (optionally `/nerolink setup force <origin>`).
      Running plain `/nerolink setup` again when already registered just
      re-dials the existing tunnel.
-3. Players run `/nerolink pair` — the whisper now shows the **Server ID**
-   prominently. **That id plus the one-time pairing code is all the app needs**
-   (no address to type). Over the relay the app sends the plain code, protected
+3. Players run `/nerolink pair` — the whisper shows a **link code** that joins
+   the Server ID and the one-time pairing code. **That link code is all the app
+   needs** (no Server ID or address to type separately). Over the relay the app sends the plain code, protected
    by TLS to the relay's public certificate. The whole API (pairing, discovery, snapshots, actions,
    live WebSocket deltas) works exactly as on the LAN, just through the relay.
 

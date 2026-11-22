@@ -7,6 +7,7 @@
 	],
 	"settings": {
 		"java.import.gradle.enabled": false,
-		"java.configuration.maven.notCoveredPluginExecutionSeverity": "ignore"
+		"java.configuration.maven.notCoveredPluginExecutionSeverity": "ignore",
+		"java.compile.nullAnalysis.mode": "automatic"
 	}
 }

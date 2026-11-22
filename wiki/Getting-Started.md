@@ -89,11 +89,13 @@ By default this registers against `https://relay.nerolandmc.net`. To use your ow
 relay, pass an origin — `/nerolink setup <https-origin>` — or set `relayOrigin` in the
 config first. See [Relay](Relay.md) for the full flow and self-hosting.
 
-## Pairing a companion client with a Server ID
+## Pairing a companion client through the relay
 
-When a relay is active, `/nerolink pair` shows the **Server ID** prominently, above the
-direct address. **That Server ID plus the one-time pairing code is all the app needs** — no
-address to type. Pairing, discovery, snapshots, actions and live deltas all work exactly
+When a relay is active, `/nerolink pair` whispers a **link code** such as
+`K7Q2MX-ABCD-EFGH`: the server's Server ID and your one-time pairing code joined together.
+**That link code is all the app needs** — no Server ID or address to type separately. Older
+app versions still ask for the Server ID and the code apart, so the whisper repeats them on a
+dimmed second line. Pairing, discovery, snapshots, actions and live deltas all work exactly
 as they do on the LAN, just through the relay.
 
 ## Browsing the in-app wiki

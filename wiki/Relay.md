@@ -57,13 +57,24 @@ config instead — see [Configuration](Configuration.md) for the precedence rule
 
 ## Server IDs
 
-The relay assigns each registered server a **short, human-friendly Server ID**. Players
-type this ID plus their one-time pairing code into the app — that's all a relay client
-needs, with **no address to type**. Server IDs are matched **case-insensitively**, so
-players don't have to worry about capitalisation.
+The relay assigns each registered server a **short, human-friendly Server ID**.
+`/nerolink pair` joins it to the player's one-time pairing code as a single **link code**
+(`<Server ID>-XXXX-XXXX`, e.g. `K7Q2MX-ABCD-EFGH`) — that's all a relay client needs, with
+**no address to type**. Codes are matched **case-insensitively**, so players don't have to
+worry about capitalisation.
 
-`/nerolink pair` shows the active Server ID prominently (above the direct address), and
-`/nerolink status` reports it alongside the relay state.
+The app splits the link code again: the last eight characters are the pairing code and
+everything before them is the Server ID. The Server ID only picks the relay route
+(`/s/<serverId>`), and only the pairing code is sent to the bridge, so the relay and bridge
+protocols are the same as when the two were typed separately — older apps keep working, and
+the whisper repeats the Server ID and the bare code for them. The Server ID is not a secret
+(the server key is), so carrying it in the link code exposes nothing new.
+
+A self-hosted relay's address can't be part of the link code, so on such a server the
+whisper also shows the relay address for the app's relay address field. Old registrations
+with a UUID-style Server ID are too long for a link code and keep the two-part whisper.
+
+`/nerolink status` reports the active Server ID alongside the relay state.
 
 > The relay's Server ID (used in the app URL `https://<relay>/s/<serverId>`) is distinct
 > from the per-world `serverId` the bridge returns in its own `discovery`/`pair` responses,

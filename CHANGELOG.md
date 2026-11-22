@@ -4,6 +4,31 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-22
+
+### Added
+
+- Your NeroLink data is now part of Neroland Core's `/neroland data exportme` (Core 1.20.1): the number
+  of paired devices, each device's name and when it was paired and last seen, and your notification
+  preferences. Never token hashes, device ids or your UUID; nothing is written to disk or logged.
+
+### Changed
+
+- Requires Neroland Core 1.20.1 or newer.
+- With a relay active, `/nerolink pair` now whispers one **link code** (`K7Q2MX-ABCD-EFGH`): the
+  Server ID and the one-time pairing code joined together, so players type a single code into the
+  app instead of a Server ID and a code. The Server ID and the bare code are still shown on a
+  second line for older app versions, and nothing changes for direct mode or for the bridge and
+  relay protocols: the app splits the link code again and only the pairing code is ever sent to
+  the bridge. A server on a self-hosted relay also whispers the relay address, since the app
+  cannot guess it.
+
+### Fixed
+
+- Crash reports no longer go silent when another mod starts Sentry. NeroLink now reports through its
+  own isolated Sentry client instead of the shared global one, with the same opt-out, filtering and
+  scrubbing. Tagged handled-exception reports now keep their tags.
+
 ## [1.4.1] - 2026-11-26
 
 ### Added

@@ -11,9 +11,14 @@ import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 
 import io.sentry.Breadcrumb;
-import io.sentry.Sentry;
+import io.sentry.IScopes;
+import io.sentry.Scope;
+import io.sentry.Scopes;
+import io.sentry.SentryClient;
 import io.sentry.SentryEvent;
 import io.sentry.SentryLevel;
+import io.sentry.SentryOptions;
+import io.sentry.UncaughtExceptionHandlerIntegration;
 import io.sentry.protocol.Message;
 import io.sentry.protocol.SentryException;
 import io.sentry.protocol.SentryStackFrame;
@@ -61,6 +66,10 @@ public final class NeroLinkTelemetry {
             Pattern.compile("(?i)(?:[A-Z]:)?[/\\\\](?:Users|home)[/\\\\][^/\\\\\\s:;,'\"]+");
 
     private static volatile boolean active;
+    /** NeroLink's own scopes; {@code null} until {@link #start} succeeds. Never the global hub. */
+    private static volatile IScopes scopes;
+    /** Process-lifetime uncaught-exception hook bound to {@link #scopes}; kept so it is never collected. */
+    private static UncaughtExceptionHandlerIntegration uncaughtHandler;
     private static final AtomicInteger eventsSent = new AtomicInteger();
     private static final Set<String> seenFingerprints = ConcurrentHashMap.newKeySet();
     private static SentryLogAppender appender;
@@ -94,17 +103,13 @@ public final class NeroLinkTelemetry {
             return;
         }
         String version = NeroLinkCommon.bridgeVersion();
-        Sentry.init(options -> {
-            options.setDsn(DSN);
-            options.setRelease("nerolink@" + version);
-            options.setEnvironment(dev ? "development" : environmentOf(version));
-            options.setSendDefaultPii(false);          // POPIA/GDPR: never the sender's IP/identity
-            options.setAttachServerName(false);        // hostname is identifying
-            options.setEnableUncaughtExceptionHandler(true);
-            options.setEnableAutoSessionTracking(false);
-            options.setBeforeSend((event, hint) -> ForeignMixinFailure.matches(event) ? null : filterAndScrub(event));
-        });
-        Sentry.configureScope(scope -> {
+        SentryOptions options = baseOptions(version, dev ? "development" : environmentOf(version));
+        options.setBeforeSend((event, hint) -> ForeignMixinFailure.matches(event) ? null : filterAndScrub(event));
+        // Own client and scopes, never the global hub: every Nero mod bundles the same Sentry jar, so
+        // a global Sentry.init would replace (and silence) every other mod's client.
+        IScopes own = isolatedScopes(options, "nerolink");
+        scopes = own;
+        own.configureScope(scope -> {
             scope.setTag("loader", InstalledMods.loader().toLowerCase(Locale.ROOT));
             scope.setTag("dist", client ? "client" : "dedicated_server");
             scope.setTag("runtime", dev ? "development" : "production");
@@ -131,11 +136,11 @@ public final class NeroLinkTelemetry {
                 // mod list not available this early — skip it
             }
         });
-        Sentry.startSession();
+        own.startSession();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
-                Sentry.endSession();
-                Sentry.flush(2000L);
+                own.endSession();
+                own.flush(2000L);
             } catch (RuntimeException ignored) {
                 // best-effort flush on shutdown
             }
@@ -150,6 +155,36 @@ public final class NeroLinkTelemetry {
                 + "opt out via telemetryEnabled=false in config/nerolink.properties).");
     }
 
+    /** Options for NeroLink's own client: same privacy settings as before, never the global hub's. */
+    static SentryOptions baseOptions(String modVersion, String environment) {
+        SentryOptions options = new SentryOptions();
+        options.setDsn(DSN);
+        options.setRelease("nerolink@" + modVersion);
+        options.setEnvironment(environment);
+        options.setSendDefaultPii(false);          // POPIA/GDPR: never the sender's IP/identity
+        options.setAttachServerName(false);        // hostname is identifying
+        options.setEnableUncaughtExceptionHandler(true);
+        options.setEnableShutdownHook(false);      // flushed by our own hook; never close the global hub
+        options.setEnableAutoSessionTracking(false);
+        return options;
+    }
+
+    /**
+     * Builds isolated scopes bound to a client of our own: what {@code Sentry.init} does, minus the global
+     * hub. The uncaught-exception handler chains to the previous one, so every mod still sees crashes and
+     * keeps only its own through {@code beforeSend}.
+     */
+    static IScopes isolatedScopes(SentryOptions options, String creator) {
+        options.activate();                        // start Sentry's executors, as the global init would
+        Scopes own = new Scopes(new Scope(options), new Scope(options), new Scope(options), creator);
+        own.bindClient(new SentryClient(options));
+        if (options.isEnableUncaughtExceptionHandler()) {
+            uncaughtHandler = new UncaughtExceptionHandlerIntegration();
+            uncaughtHandler.register(own, options);
+        }
+        return own;
+    }
+
     /** A non-identifying breadcrumb that rides along with the next error report. No-op when off. */
     public static void breadcrumb(String category, String message) {
         if (!active) {
@@ -160,7 +195,7 @@ public final class NeroLinkTelemetry {
         crumb.setCategory(category);
         crumb.setLevel(SentryLevel.INFO);
         crumb.setMessage(scrub(message));
-        Sentry.addBreadcrumb(crumb);
+        scopes.addBreadcrumb(crumb);
     }
 
     private static String environmentOf(String version) {
@@ -201,7 +236,7 @@ public final class NeroLinkTelemetry {
         if (!active || t == null) {
             return;
         }
-        Sentry.captureException(t);
+        scopes.captureException(t);
     }
 
     /** Capture a handled exception if it is still clearly from NeroLink code. */
@@ -216,11 +251,10 @@ public final class NeroLinkTelemetry {
         if (!active || t == null || !touchesNeroLink(t)) {
             return;
         }
-        Sentry.withScope(scope -> {
+        scopes.captureException(t, scope -> {
             scope.setTag("handled", "true");
             scope.setTag("source", source);
             scope.setExtra("operation", operation);
-            Sentry.captureException(t);
         });
     }
 
@@ -237,7 +271,7 @@ public final class NeroLinkTelemetry {
         Message msg = new Message();
         msg.setFormatted(scrubbed);
         event.setMessage(msg);
-        Sentry.captureEvent(event);
+        scopes.captureEvent(event);
     }
 
     private static SentryEvent filterAndScrub(SentryEvent event) {
