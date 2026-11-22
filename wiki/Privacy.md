@@ -23,6 +23,11 @@ UUID and device id only, at most 4096) wait in the same saved data until deliver
 Pairing rate limits count failed attempts per source for one minute — the client IP on
 direct connections, or a salted, daily-rotating hash of it via the relay — in memory only.
 
+Five one-off milestones (first device paired, two devices at once, first app action, first in-app
+wiki page, alerts turned on) are recorded as player-scope Neroland Core progression gates, so other
+mods such as trophies can recognise them. Only your UUID is stored, in Core's progression store, and
+`/neroland data eraseme` removes it; no device details are part of a gate.
+
 That is the complete list. Game data shown in companion clients (energy, drones, quests,
 stock) is read **live** from the owning mods and is never copied into NeroLink's storage.
 

@@ -26,6 +26,8 @@ import za.co.neroland.nerolink.http.ApiErrors;
 import za.co.neroland.nerolink.http.ApiRequest;
 import za.co.neroland.nerolink.http.ApiResponse;
 import za.co.neroland.nerolink.prefs.PrefsStore;
+import za.co.neroland.nerolink.progression.LinkMilestoneRules;
+import za.co.neroland.nerolink.progression.LinkMilestones;
 import za.co.neroland.nerolink.ratelimit.RequestBudget;
 
 /**
@@ -149,7 +151,9 @@ public final class ApiDispatcher {
                 return switch (seg.size()) {
                     case 1 -> onServerThread(() -> WikiRoutes.aggregateIndex(player));
                     case 2 -> onServerThread(() -> WikiRoutes.moduleIndex(player, seg.get(1)));
-                    case 3 -> onServerThread(() -> WikiRoutes.modulePage(player, seg.get(1), seg.get(2)));
+                    case 3 -> onServerThread(() -> recordIfServed(
+                            WikiRoutes.modulePage(player, seg.get(1), seg.get(2)),
+                            player, LinkMilestones.Milestone.WIKI_READER));
                     default -> completed(ApiResponse.notFound("no such wiki route"));
                 };
             }
@@ -301,8 +305,20 @@ public final class ApiDispatcher {
             }
             ApiResponse response = toResponse(result);
             bridge.dedup().remember(player, requestId, response.body());
+            recordIfServed(response, player, LinkMilestones.Milestone.FIRST_ACTION);
             return response;
         });
+    }
+
+    /**
+     * Record {@code milestone} for {@code player} when {@code response} is a success, then return it
+     * unchanged. Server thread only (every caller runs inside {@link #onServerThread}).
+     */
+    private ApiResponse recordIfServed(ApiResponse response, UUID player, LinkMilestones.Milestone milestone) {
+        if (response != null && LinkMilestoneRules.succeeded(response.status())) {
+            LinkMilestones.record(bridge.server(), player, milestone);
+        }
+        return response;
     }
 
     private static ApiResponse toResponse(LinkActionResult result) {
@@ -402,6 +418,9 @@ public final class ApiDispatcher {
             }
         }
         PrefsStore.get(bridge.server()).setNotifications(player, map);
+        if (LinkMilestoneRules.enablesAlerts(map)) {
+            LinkMilestones.record(bridge.server(), player, LinkMilestones.Milestone.ALERTS_ENABLED);
+        }
         return prefsGet(player);
     }
 
@@ -459,6 +478,10 @@ public final class ApiDispatcher {
                         "device limit reached; revoke one with /nerolink devices and /nerolink revoke");
             }
             TokenStore.Issued issued = bridge.tokens().issue(server, player, deviceName);
+            LinkMilestones.record(server, player, LinkMilestones.Milestone.FIRST_PAIRED);
+            if (LinkMilestoneRules.earnsTwoDevices(bridge.tokens().devicesOf(player).size())) {
+                LinkMilestones.record(server, player, LinkMilestones.Milestone.TWO_DEVICES);
+            }
             ServerPlayer sp = server.getPlayerList().getPlayer(player);
             JsonObject data = new JsonObject();
             data.addProperty("token", issued.token());

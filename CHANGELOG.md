@@ -4,6 +4,16 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-26
+
+### Added
+
+- Five player-scope progression gates for trophy and quest packs: `nerolink:first_paired` (a device
+  is paired), `nerolink:two_devices` (two paired devices at once), `nerolink:first_action` (an app
+  action succeeds), `nerolink:wiki_reader` (an in-app wiki page is served) and
+  `nerolink:alerts_enabled` (a notification category is turned on). Only the player UUID reaches
+  Core's progression store; no device data is part of a gate.
+
 ## [1.4.0] - 2026-11-18
 
 ### Added

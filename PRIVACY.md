@@ -25,6 +25,11 @@ Pairing brute-force protection counts failures per source for one minute: the cl
 on direct connections, or a salted, daily-rotating hash of it forwarded by the relay.
 These counters are held in memory only.
 
+Five one-off milestones (first device paired, two devices at once, first app action, first
+in-app wiki page, alerts turned on) are recorded as player-scope **Neroland Core progression gates**,
+so other mods can award them. Only the player UUID goes into Core's progression store, which Core's
+erasure purges; no device id, device name, token hash or address is part of a gate.
+
 That is the complete list. Game data shown in companion clients (energy, drones,
 quests, stock) is read live from the owning mods and never copied into NeroLink's
 storage.
