@@ -23,7 +23,7 @@
   "depends": {
     "fabricloader": ">=${fabric_loader_version}",
     "minecraft": "${minecraft_requirement}",
-    "java": ">=21",
+    "java": ">=${java_version}",
     "fabric-api": "*",
     "nerolandcore": ">=${nerolandcore_version} <2.0.0"
   }

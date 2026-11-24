@@ -328,21 +328,23 @@ public final class ApiDispatcher {
         if (result.ok()) {
             return ApiResponse.ok(result.state() == null ? new JsonObject() : result.state());
         }
-        String code = switch (result.error()) {
+        var error = result.error();
+        if (error == null) {
+            return ApiResponse.error(500, ApiErrors.INTERNAL, result.message());
+        }
+        String code = switch (error) {
             case NOT_OWNER -> ApiErrors.NOT_OWNER;
             case GATE_LOCKED -> ApiErrors.GATE_LOCKED;
             case VALIDATION -> ApiErrors.VALIDATION;
             case ACTION_DISABLED -> ApiErrors.ACTION_DISABLED;
             case PLAYER_OFFLINE_REQUIRED -> ApiErrors.PLAYER_OFFLINE_REQUIRED;
             case INTERNAL -> ApiErrors.INTERNAL;
-            case null -> ApiErrors.INTERNAL;
         };
-        int status = switch (result.error()) {
+        int status = switch (error) {
             case VALIDATION -> 400;
             case NOT_OWNER, GATE_LOCKED, ACTION_DISABLED -> 403;
             case PLAYER_OFFLINE_REQUIRED -> 409;
             case INTERNAL -> 500;
-            case null -> 500;
         };
         return ApiResponse.error(status, code, result.message());
     }

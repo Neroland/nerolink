@@ -8,6 +8,7 @@
 // =====================================================================
 plugins {
     id 'dev.kikugie.stonecutter'
+    id 'com.gradleup.shadow' apply false
 }
 
 // The version checked out in the IDE / used by a plain `build`. Switch with the
@@ -29,6 +30,8 @@ ext.legacyRenames = [
     // 1.21.11 renamed ResourceLocation -> Identifier and ResourceKey.location() -> identifier().
     [below: '1.21.11', from: /\bIdentifier\b/, to: 'ResourceLocation'],
     [below: '1.21.11', from: /\.identifier\(\)/, to: '.location()'],
+    [below: '1.21', from: /\b((?:net\.minecraft\.resources\.)?ResourceLocation)\s*\.(?:fromNamespaceAndPath|parse|withDefaultNamespace)\(/, to: 'new $1('],
+    [below: '1.21', from: /\bio\.netty\./, to: 'za.co.neroland.nerolink.internal.netty.'],
     // 26.1 renamed GuiGraphics -> GuiGraphicsExtractor and its drawString(..) -> text(..). The text()
     // rename is keyed on the receiver names this codebase uses for the graphics object (g / graphics).
     [below: '26.1', from: /\bGuiGraphicsExtractor\b/, to: 'GuiGraphics'],
@@ -66,7 +69,8 @@ subprojects {
 
     // Minecraft 1.21.x runs on Java 21, so its cells must emit Java 21 bytecode (and may not use
     // Java 22+ language features). 26.x cells stay on Java 25. A node's project name IS its MC version.
-    def javaRelease = project.name.startsWith('1.') ? 21 : 25
+    def javaRelease = project.name in ['1.20', '1.20.1', '1.20.2', '1.20.3', '1.20.4'] ?
+            17 : (project.name.startsWith('1.') ? 21 : 25)
     ext.javaRelease = javaRelease
 
     java {
@@ -113,6 +117,55 @@ subprojects {
     // Java extension would reject the nested node ("not a valid java project"). Keeping
     // branch parents as plain folders lets VS Code import each node as a standalone project.
     def isNode = project.parent != null && project.parent.parent != null
+    def legacyPackFormats = [
+            '1.20': [15, 15], '1.20.1': [15, 15], '1.20.2': [18, 18],
+            '1.20.3': [22, 26], '1.20.4': [22, 26], '1.20.5': [32, 41], '1.20.6': [32, 41]
+    ][project.name]
+    if (isNode && legacyPackFormats != null) {
+        // Older Minecraft provides Netty for game traffic. Keep the bridge's HTTP stack independent of it.
+        def bridgeNetty = configurations.create('bridgeNetty') {
+            canBeResolved = true
+            canBeConsumed = false
+        }
+        dependencies.add(bridgeNetty.name, "io.netty:netty-codec-http:${rootProject.netty_legacy_bridge_version}")
+        def nettyJar = tasks.register('bridgeNettyJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+            archiveBaseName = 'nerolink-bridge-netty'
+            destinationDirectory = layout.buildDirectory.dir('bridge-netty')
+            configurations = [bridgeNetty]
+            relocate 'io.netty', 'za.co.neroland.nerolink.internal.netty'
+            exclude 'module-info.class', 'META-INF/versions/**', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+            exclude 'META-INF/services/reactor.blockhound.integration.BlockHoundIntegration'
+            duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        }
+        def bridgeJar = nettyJar.flatMap { it.archiveFile }
+        dependencies.add('implementation', files(bridgeJar))
+        tasks.named('jar', Jar) {
+            dependsOn nettyJar
+            from(rootProject.file("gradle/licenses/netty-${rootProject.netty_legacy_bridge_version}.txt")) {
+                into 'META-INF/licenses'
+            }
+            from({ zipTree(bridgeJar.get().asFile) }) {
+                exclude 'META-INF/MANIFEST.MF'
+            }
+        }
+        tasks.named('processResources') {
+            doLast {
+                def packFile = new File(destinationDir, 'pack.mcmeta')
+                def pack = new groovy.json.JsonSlurper().parse(packFile)
+                pack.pack.putAll(pack_format: legacyPackFormats[0], supported_formats: legacyPackFormats)
+                pack.pack.remove('min_format')
+                pack.pack.remove('max_format')
+                packFile.setText(groovy.json.JsonOutput.toJson(pack), 'UTF-8')
+                if (project.javaRelease == 17) {
+                    destinationDir.eachFileMatch(~/.*\.mixins\.json/) { mixinFile ->
+                        def mixin = new groovy.json.JsonSlurper().parse(mixinFile)
+                        mixin.compatibilityLevel = 'JAVA_17'
+                        mixinFile.setText(groovy.json.JsonOutput.toJson(mixin), 'UTF-8')
+                    }
+                }
+            }
+        }
+    }
 
     // Stonecutter only preprocesses a node's own src/ tree; the shared common/ source above is spliced
     // in raw, so it could never carry `//? if >=26.3 {` blocks. Route it through Stonecutter's public

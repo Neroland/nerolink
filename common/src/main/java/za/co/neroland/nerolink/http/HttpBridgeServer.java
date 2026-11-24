@@ -15,6 +15,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpObjectAggregator;
@@ -78,8 +79,8 @@ public final class HttpBridgeServer {
                         .build();
         this.tlsActive = sslContext != null;
 
-        bossGroup = new NioEventLoopGroup(1, namedThreads("nerolink-boss"));
-        workerGroup = new NioEventLoopGroup(2, namedThreads("nerolink-io"));
+        bossGroup = new NioEventLoopGroup(1, new DefaultThreadFactory("nerolink-boss", true));
+        workerGroup = new NioEventLoopGroup(2, new DefaultThreadFactory("nerolink-io", true));
 
         ServerBootstrap bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup)
@@ -160,12 +161,4 @@ public final class HttpBridgeServer {
         }
     }
 
-    private static java.util.concurrent.ThreadFactory namedThreads(String prefix) {
-        AtomicInteger counter = new AtomicInteger();
-        return r -> {
-            Thread t = new Thread(r, prefix + "-" + counter.incrementAndGet());
-            t.setDaemon(true);
-            return t;
-        };
-    }
 }

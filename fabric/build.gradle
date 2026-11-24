@@ -143,6 +143,7 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
         fabric_loader_version: rootProject.fabric_loader_version,
         minecraft_version    : mc,
         minecraft_requirement: minecraftRequirement,
+        java_version         : project.javaRelease,
         // Floor the required Core version at what we compile against so the loader refuses to
         // run against a Core too old to have the APIs it references.
         nerolandcore_version : nerolandcoreVersion,
@@ -158,7 +159,8 @@ eclipse.synchronizationTasks generateModMetadata
 // The access widener's namespace differs by era: 26.x is `official` (de-obfuscated), 1.21.x is `named`
 // (Mojang mappings, remapped to intermediary in remapJar). Each 1.21.x line has its own file under
 // src/main/accesswidener/, swapped into the jar under the name fabric.mod.json declares.
-def awFile = obfuscated ? file("${branchDir}/src/main/accesswidener/${mc}.accesswidener")
+def awVersion = stonecutter.eval(mc, '<1.21') ? '1.21.1' : mc
+def awFile = obfuscated ? file("${branchDir}/src/main/accesswidener/${awVersion}.accesswidener")
         : file("${branchDir}/src/main/resources/nerolink.accesswidener")
 if (obfuscated) {
     tasks.named('processResources', ProcessResources) {

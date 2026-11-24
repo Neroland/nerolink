@@ -4,12 +4,17 @@
 plugins {
     id 'net.minecraftforge.gradle'
     id 'net.minecraftforge.jarjar'
+    id 'net.minecraftforge.renamer' apply false
     id 'eclipse'
     id 'maven-publish'
 }
 
 // MC version comes from the Stonecutter node (e.g. :forge:26.1.2), not a global property.
 def mc = stonecutter.current.version
+def legacyForge = stonecutter.eval(mc, '<1.20.5')
+if (legacyForge) {
+    apply plugin: 'net.minecraftforge.renamer'
+}
 // Minecraft range: 1.21.x cells are bounded to their API line (gradle.properties); 26.x keep [mc,).
 def mcCeiling = project.findProperty("mc_ceiling_${mc}")
 def mcFloor = project.findProperty("mc_floor_${mc}") ?: mc
@@ -136,6 +141,17 @@ dependencies {
     if (emiFile) {
         compileOnly "curse.maven:emi-unofficial-port-unstable-1544558:${emiFile}"
     }
+}
+
+if (legacyForge) {
+    renamer.mappings.from minecraft.dependency.toSrgFile
+    def bundled = tasks.named('jarJar', Jar) {
+        archiveClassifier = 'dev-all'
+    }
+    renamer.classes('renameReleaseJar', bundled) {
+        archiveClassifier = 'all'
+    }
+    tasks.named('assemble') { dependsOn 'renameReleaseJar' }
 }
 
 // Expand mods.toml from src/main/templates into generated resources.

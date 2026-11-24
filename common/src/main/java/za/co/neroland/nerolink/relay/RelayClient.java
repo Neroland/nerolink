@@ -8,9 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.gson.JsonObject;
 
@@ -24,6 +22,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
@@ -167,7 +166,7 @@ public final class RelayClient {
             }
         }
 
-        this.group = new NioEventLoopGroup(1, daemonThreads("nerolink-relay"));
+        this.group = new NioEventLoopGroup(1, new DefaultThreadFactory("nerolink-relay", true));
         this.epoch++;
         this.running = true;
         this.state = State.CONNECTING;
@@ -697,12 +696,4 @@ public final class RelayClient {
         return obj.has(key) && obj.get(key).isJsonPrimitive() ? obj.get(key).getAsString() : null;
     }
 
-    private static ThreadFactory daemonThreads(String prefix) {
-        AtomicInteger counter = new AtomicInteger();
-        return r -> {
-            Thread t = new Thread(r, prefix + "-" + counter.incrementAndGet());
-            t.setDaemon(true);
-            return t;
-        };
-    }
 }

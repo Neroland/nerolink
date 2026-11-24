@@ -35,7 +35,11 @@ import za.co.neroland.nerolink.telemetry.NeroLinkTelemetry;
 @Mod(NeroLinkCommon.MOD_ID)
 public final class NeroLinkForge {
 
+    //? if >=1.20.5 {
     public NeroLinkForge(FMLJavaModLoadingContext context) {
+    //?} else {
+    /*public NeroLinkForge() {
+    *///?}
         NeroLinkCommon.LOGGER.info("[NeroLink] Forge bootstrap");
         NeroLinkCommon.init();
         collectInstalledMods();

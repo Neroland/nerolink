@@ -10,9 +10,9 @@ energy at a glance, alerts, and a small set of safe, server-validated actions. I
 does nothing you couldn't do standing at the relevant block in-game. NeroLink adds no
 blocks or items.
 
-> **Status:** heading for **1.0.0**, the first production release, built on **Neroland
-> Core 1.13.0 or newer (below 2.0)** across the nine cross-loader cells (Fabric, Forge,
-> NeoForge on Minecraft 26.1.2, 26.2 and 26.3). The v1 bridge is implemented: TLS pairing
+> **Neroland Core 1.23.0 or newer (below 2.0)** is required. In the Minecraft 1.20 series,
+> Fabric supports 1.20 through 1.20.6, Forge supports 1.20 through 1.20.4 and 1.20.6, and
+> NeoForge supports 1.20.4 and 1.20.6. The bridge supports TLS pairing
 > and device tokens, capability discovery, per-module snapshots, safe actions, live
 > WebSocket deltas, privacy endpoints, and outbound relay access for servers behind NAT. Every other Nero mod is a progressive enhancement,
 > discovered at connect time — a Core-only server is already useful.

@@ -150,8 +150,13 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
         nerolandcore_version_range: "[${nerolandcoreVersion},2.0)",
     ]
     inputs.properties(props)
+    def legacyManifest = stonecutter.eval(mc, '<1.20.5')
+    inputs.property('legacyManifest', legacyManifest)
     expand(props)
     from "${branchDir}/src/main/templates"
+    if (legacyManifest) {
+        filesMatching('META-INF/neoforge.mods.toml') { details -> details.name = 'mods.toml' }
+    }
     into layout.buildDirectory.dir('generated/sources/modMetadata')
 }
 sourceSets.main.resources.srcDir generateModMetadata

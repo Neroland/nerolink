@@ -4,6 +4,17 @@ All notable changes to NeroLink. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-26
+
+### Added
+
+- Minecraft 1.20 through 1.20.6 on Fabric, 1.20 through 1.20.4 and 1.20.6 on Forge, and
+  1.20.4 and 1.20.6 on NeoForge.
+
+### Changed
+
+- Requires Neroland Core 1.23.0 or newer.
+
 ## [1.5.0] - 2026-11-22
 
 ### Added
