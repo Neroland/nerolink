@@ -3,16 +3,9 @@ name: Publish
 # Builds and publishes every supported loader and Minecraft version combination
 # whenever the mod_version in gradle.properties has no published release yet.
 #
-# Pipeline (4 jobs):
-#   detect  -> is there a v<mod_version> release tag yet? (read-only ledger check)
-#   build   -> build each supported cell once; extract release notes; upload the distributable
-#              jars + notes as the `dist` artifact.
-#   publish -> matrix over the supported cells: download `dist`, upload each jar to CurseForge as its own version tagged with the EXACT loader + game-version (each
-#              version self-contained, carrying its own copy of the changelog).
-#   release -> runs LAST (needs: publish): download `dist`, register the Sentry release, then
-#              create the single GitHub Release + the v<version> tag. That tag is the ledger
-#              `detect` checks, so creating it last means a failed CurseForge upload leaves NO tag
-#              and a re-run retries cleanly instead of being skipped.
+# The build matrix compiles and tests each supported cell on its own runner.
+# Maven publishing and distribution packaging start after every build succeeds.
+# CurseForge uploads run serially, then the GitHub release records the version tag.
 #
 # Re-runs are safe: an already-released version (tag exists) is skipped. `workflow_dispatch`
 # runs the same check manually (catch up a missed release without a dummy commit).
@@ -40,6 +33,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      matrix: ${{ steps.cells.outputs.matrix }}
       changed: ${{ steps.check.outputs.changed }}
       version: ${{ steps.check.outputs.version }}
     steps:
@@ -72,17 +66,70 @@ jobs:
           fi
           echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
 
+      - name: Define supported release cells
+        id: cells
+        shell: bash
+        run: |
+          matrix="$(jq -c . <<'CELLS'
+          {"include":[
+            {"loader": "fabric", "mc": "1.20", "games": "1.20", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.20.1", "games": "1.20.1", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.20.2", "games": "1.20.2", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.20.3", "games": "1.20.3", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.20.4", "games": "1.20.4", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.20.5", "games": "1.20.5", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.20.6", "games": "1.20.6", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.21.1", "games": "1.21.1", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.21.4", "games": "1.21.4", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.21.5", "games": "1.21.5", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.21.8", "games": "1.21.7,1.21.8", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.21.10", "games": "1.21.9,1.21.10", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "1.21.11", "games": "1.21.11", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "26.1.2", "games": "26.1.2", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "26.2", "games": "26.2", "label": "Fabric", "suffix": ""},
+            {"loader": "fabric", "mc": "26.3", "games": "26.3", "label": "Fabric", "suffix": ""},
+            {"loader": "neoforge", "mc": "1.20.4", "games": "1.20.4", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "1.20.6", "games": "1.20.6", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "1.21.1", "games": "1.21.1", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "1.21.4", "games": "1.21.4", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "1.21.5", "games": "1.21.5", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "1.21.8", "games": "1.21.7,1.21.8", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "1.21.10", "games": "1.21.9,1.21.10", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "1.21.11", "games": "1.21.11", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "26.1.2", "games": "26.1.2", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "26.2", "games": "26.2", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "26.3", "games": "26.3", "label": "NeoForge", "suffix": ""},
+            {"loader": "forge", "mc": "1.20", "games": "1.20", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.20.1", "games": "1.20.1", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.20.2", "games": "1.20.2", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.20.3", "games": "1.20.3", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.20.4", "games": "1.20.4", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.20.6", "games": "1.20.6", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.21.1", "games": "1.21.1", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.21.4", "games": "1.21.4", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.21.5", "games": "1.21.5", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.21.8", "games": "1.21.7,1.21.8", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.21.10", "games": "1.21.9,1.21.10", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "1.21.11", "games": "1.21.11", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "26.1.2", "games": "26.1.2", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "26.2", "games": "26.2", "label": "Forge", "suffix": "-all"},
+            {"loader": "forge", "mc": "26.3", "games": "26.3", "label": "Forge", "suffix": "-all"}
+          ]}
+          CELLS
+          )"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   build:
-    name: Build all cells
+    name: Build ${{ matrix.label }} ${{ matrix.mc }}
     needs: detect
     if: needs.detect.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write  # resolve Neroland Core from GitHub Packages AND publish NeroLink's own Maven cells
-    outputs:
-      environment: ${{ steps.channel.outputs.environment }}
-      version_type: ${{ steps.channel.outputs.version_type }}
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -114,80 +161,148 @@ jobs:
       # See USING-CORE.md.
       # --- end Neroland Core dependency ---
 
-      # Build all cells (loader x MC version). Each produces a distinctly named jar under
-      # <loader>/versions/<mc>/build/libs. Forge's distributable is the jarJar output
-      # ("*-all.jar", with embedded Sentry); the plain Forge jar is not shipped.
-      - name: Build all cells
+      - name: Build and stage this release cell
+        shell: bash
         env:
+          LOADER: ${{ matrix.loader }}
+          MC: ${{ matrix.mc }}
+          SUFFIX: ${{ matrix.suffix }}
+          VERSION: ${{ needs.detect.outputs.version }}
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mod="$(grep -E '^mod_id=' gradle.properties | cut -d= -f2)"
+          group="$(grep -E '^mod_group_id=' gradle.properties | cut -d= -f2)"
+          artifact="$mod-$LOADER-$MC"
+          local_repo="$RUNNER_TEMP/cell-maven"
+          ./gradlew ":$LOADER:$MC:build" ":$LOADER:$MC:publishModPublicationToMavenLocal" \
+            "-Dmaven.repo.local=$local_repo" --configure-on-demand --max-workers=2 --stacktrace
+
+          maven="$local_repo/$(printf '%s' "$group" | tr '.' '/')/$artifact/$VERSION/$artifact-$VERSION"
+          jar="$artifact-$VERSION$SUFFIX.jar"
+          mkdir -p cell/dist
+          cp "$LOADER/versions/$MC/build/libs/$jar" "cell/dist/$jar"
+          cp "$maven.pom" cell/maven.pom
+          if [ -n "$SUFFIX" ]; then
+            cp "$maven.jar" cell/maven.jar
+          else
+            cmp "$maven.jar" "cell/dist/$jar"
+          fi
+
+      - name: Upload this release cell
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: build-${{ matrix.loader }}-${{ matrix.mc }}
+          path: cell/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  package_release:
+    name: Publish Maven artifacts and prepare distribution
+    needs: [detect, build]
+    if: needs.detect.outputs.changed == 'true' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      environment: ${{ steps.channel.outputs.environment }}
+      version_type: ${{ steps.channel.outputs.version_type }}
+    env:
+      MATRIX: ${{ needs.detect.outputs.matrix }}
+      VERSION: ${{ needs.detect.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 1
+
+      - name: Download all successful build cells
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: build-*
+          path: built
+
+      - name: Verify and collect all distributables
         shell: bash
         run: |
-          log="$(mktemp)"
-          trap 'rm -f "$log"' EXIT
-          for attempt in 1 2 3; do
-            if ./gradlew \
-              :fabric:1.20:build :fabric:1.20.1:build :fabric:1.20.2:build :fabric:1.20.3:build :fabric:1.20.4:build :fabric:1.20.5:build :fabric:1.20.6:build :fabric:1.21.1:build :fabric:1.21.4:build :fabric:1.21.5:build :fabric:1.21.8:build :fabric:1.21.10:build :fabric:1.21.11:build :fabric:26.1.2:build :fabric:26.2:build :fabric:26.3:build \
-              :neoforge:1.20.4:build :neoforge:1.20.6:build :neoforge:1.21.1:build :neoforge:1.21.4:build :neoforge:1.21.5:build :neoforge:1.21.8:build :neoforge:1.21.10:build :neoforge:1.21.11:build :neoforge:26.1.2:build :neoforge:26.2:build :neoforge:26.3:build \
-              :forge:1.20:build :forge:1.20.1:build :forge:1.20.2:build :forge:1.20.3:build :forge:1.20.4:build :forge:1.20.6:build :forge:1.21.1:build :forge:1.21.4:build :forge:1.21.5:build :forge:1.21.8:build :forge:1.21.10:build :forge:1.21.11:build :forge:26.1.2:build :forge:26.2:build :forge:26.3:build \
-              --stacktrace 2>&1 | tee "$log"; then
-              exit 0
-            else
-              status=${PIPESTATUS[0]}
+          mod="$(grep -E '^mod_id=' gradle.properties | cut -d= -f2)"
+          mkdir -p dist
+          cells="$(jq -er '.include[] | [.loader, .mc, .suffix] | @tsv' <<< "$MATRIX")"
+          while IFS=$'\t' read -r loader mc suffix; do
+            cell="built/build-$loader-$mc"
+            jar="$mod-$loader-$mc-$VERSION$suffix.jar"
+            maven_jar="$cell/dist/$jar"
+            if [ -n "$suffix" ]; then
+              maven_jar="$cell/maven.jar"
             fi
-            if [ "$attempt" -eq 3 ] || ! grep -Eq 'java\.net\.http\.Http(Connect)?TimeoutException|java\.net\.SocketTimeoutException|java\.(net\.SocketException|io\.IOException): Connection reset' "$log"; then
-              exit "$status"
-            fi
-            echo "::warning::Dependency download interrupted (attempt $attempt/3); retrying in 15s."
-            sleep 15
-          done
+            for file in "$cell/dist/$jar" "$cell/maven.pom" "$maven_jar"; do
+              if [ ! -s "$file" ]; then
+                echo "::error::Missing or empty build artifact $file"
+                exit 1
+              fi
+            done
+            cp "$cell/dist/$jar" "dist/$jar"
+          done <<< "$cells"
 
-      # Publish the per-loader Maven artifacts to GitHub Packages (mirrors Neroland Core's publish.yml)
-      # so downstream Nero mods can resolve NeroLink from a remote repo (CI runners + fresh clones have an
-      # empty ~/.m2). CurseForge/GitHub Releases carry player-facing jars, not Gradle dependencies.
-      # The jars were just built above, so `publish`'s `jar` dependency is UP-TO-DATE and this step only
-      # uploads — no second build. GITHUB_TOKEN is the workflow's own token (packages: write granted above).
-      #
-      # Idempotent: GitHub Packages rejects re-uploading an existing version with HTTP 409, and the
-      # v<version> tag is only cut at the very end of the pipeline - so a run that failed AFTER this step
-      # (e.g. on CurseForge) would otherwise fail here forever on retry. Each cell's jar is probed first and
-      # cells already published at this version are skipped.
-      # Privacy (POPIA/GDPR): only build artifacts + version strings are handled or logged.
       - name: Publish Maven artifacts to GitHub Packages
+        shell: bash
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.detect.outputs.version }}
         run: |
-          GROUP_PATH="$(grep -E '^mod_group_id=' gradle.properties | head -n1 | cut -d= -f2 | tr -d '[:space:]' | tr '.' '/')"
-          BASE="https://maven.pkg.github.com/${GITHUB_REPOSITORY}/${GROUP_PATH}"
-          TASKS=()
-          for loader in fabric neoforge forge; do
-            for mc in 1.20 1.20.1 1.20.2 1.20.3 1.20.4 1.20.5 1.20.6 1.21.1 1.21.4 1.21.5 1.21.8 1.21.10 1.21.11 26.1.2 26.2 26.3; do
-              case "${loader}:${mc}" in
-                neoforge:1.20|neoforge:1.20.1|neoforge:1.20.2|neoforge:1.20.3|neoforge:1.20.5|forge:1.20.5) continue ;;
-              esac
-              ART="nerolink-${loader}-${mc}"
-              CODE=$(curl -sS -o /dev/null -w "%{http_code}" -u "${GITHUB_ACTOR}:${GITHUB_TOKEN}" \
-                "${BASE}/${ART}/${VERSION}/${ART}-${VERSION}.jar" || echo "000")
-              if [ "$CODE" = "200" ]; then
-                echo "${ART} ${VERSION} already in GitHub Packages; skipping."
-              else
-                TASKS+=(":${loader}:${mc}:publish")
-              fi
-            done
-          done
-          if [ ${#TASKS[@]} -eq 0 ]; then
-            echo "All cells already published at ${VERSION}; nothing to upload."
-            exit 0
-          fi
-          echo "Publishing ${#TASKS[@]} cell(s): ${TASKS[*]}"
-          ./gradlew "${TASKS[@]}" --stacktrace
+          mod="$(grep -E '^mod_id=' gradle.properties | cut -d= -f2)"
+          group="$(grep -E '^mod_group_id=' gradle.properties | cut -d= -f2)"
+          repository="https://maven.pkg.github.com/$GITHUB_REPOSITORY"
+          group_path="$(printf '%s' "$group" | tr '.' '/')"
+          settings="$RUNNER_TEMP/github-maven-settings.xml"
+          cat > "$settings" <<'MAVEN_SETTINGS'
+          <settings>
+            <servers>
+              <server>
+                <id>github</id>
+                <username>${env.GITHUB_ACTOR}</username>
+                <password>${env.GITHUB_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          MAVEN_SETTINGS
 
-      # Release channel from the version suffix: -alpha -> alpha, -beta -> beta, else release.
-      # Used by Sentry (environment) and the publish targets (version-type). NeroLinkTelemetry
-      # derives its environment the same way. Version is passed via env, not ${{ }} interpolation
-      # into the script body (defence in depth). Privacy: logs only the version string.
+          status_for() {
+            curl --silent --show-error --retry 3 --output /dev/null --write-out '%{http_code}' \
+              --user "$GITHUB_ACTOR:$GITHUB_TOKEN" "$1"
+          }
+
+          cells="$(jq -er '.include[] | [.loader, .mc, .suffix] | @tsv' <<< "$MATRIX")"
+          while IFS=$'\t' read -r loader mc suffix; do
+            artifact="$mod-$loader-$mc"
+            url="$repository/$group_path/$artifact/$VERSION/$artifact-$VERSION"
+            jar_status="$(status_for "$url.jar")"
+            pom_status="$(status_for "$url.pom")"
+            case "$jar_status/$pom_status" in
+              200/200)
+                echo "$artifact $VERSION is already published"
+                continue
+                ;;
+              404/404) ;;
+              *)
+                echo "::error::Unexpected GitHub Packages status for $artifact $VERSION (jar $jar_status, POM $pom_status)"
+                exit 1
+                ;;
+            esac
+
+            cell="built/build-$loader-$mc"
+            jar="$cell/dist/$artifact-$VERSION$suffix.jar"
+            if [ -n "$suffix" ]; then
+              jar="$cell/maven.jar"
+            fi
+            mvn --batch-mode --no-transfer-progress --settings "$settings" \
+              org.apache.maven.plugins:maven-deploy-plugin:3.1.3:deploy-file \
+              -DrepositoryId=github "-Durl=$repository" "-Dfile=$jar" \
+              "-DpomFile=$cell/maven.pom" -DretryFailedDeploymentCount=4
+          done <<< "$cells"
+
       - name: Determine release channel
         id: channel
         env:
@@ -202,9 +317,6 @@ jobs:
                       echo "version_type=release"   >> "$GITHUB_OUTPUT" ;;
           esac
 
-      # Pull this version's section from CHANGELOG.md (Keep-a-Changelog headings) for the
-      # release notes. Literal prefix match (no regex on the version, so dots in "1.0.0" can't
-      # act as wildcards). Falls back to a placeholder if the file OR the section is missing.
       - name: Extract changelog section
         env:
           VERSION: ${{ needs.detect.outputs.version }}
@@ -226,70 +338,21 @@ jobs:
           fi
           cat RELEASE_NOTES.md
 
-      # Gather exactly the six distributable jars (Forge = the -all jarJar build) + the release
-      # notes into dist/. `bash -e` aborts loudly if any expected jar is missing (e.g. a name
-      # mismatch), and upload-artifact fails on an empty dist/ - so a path drift can't publish nothing.
-      - name: Collect distributables
-        env:
-          VERSION: ${{ needs.detect.outputs.version }}
-        run: |
-          mkdir -p dist
-          cp "fabric/versions/1.20/build/libs/nerolink-fabric-1.20-$VERSION.jar" dist/
-          cp "fabric/versions/1.20.1/build/libs/nerolink-fabric-1.20.1-$VERSION.jar" dist/
-          cp "fabric/versions/1.20.2/build/libs/nerolink-fabric-1.20.2-$VERSION.jar" dist/
-          cp "fabric/versions/1.20.3/build/libs/nerolink-fabric-1.20.3-$VERSION.jar" dist/
-          cp "fabric/versions/1.20.4/build/libs/nerolink-fabric-1.20.4-$VERSION.jar" dist/
-          cp "fabric/versions/1.20.5/build/libs/nerolink-fabric-1.20.5-$VERSION.jar" dist/
-          cp "fabric/versions/1.20.6/build/libs/nerolink-fabric-1.20.6-$VERSION.jar" dist/
-          cp "fabric/versions/1.21.1/build/libs/nerolink-fabric-1.21.1-$VERSION.jar" dist/
-          cp "fabric/versions/1.21.4/build/libs/nerolink-fabric-1.21.4-$VERSION.jar" dist/
-          cp "fabric/versions/1.21.5/build/libs/nerolink-fabric-1.21.5-$VERSION.jar" dist/
-          cp "fabric/versions/1.21.8/build/libs/nerolink-fabric-1.21.8-$VERSION.jar" dist/
-          cp "fabric/versions/1.21.10/build/libs/nerolink-fabric-1.21.10-$VERSION.jar" dist/
-          cp "fabric/versions/1.21.11/build/libs/nerolink-fabric-1.21.11-$VERSION.jar" dist/
-          cp "fabric/versions/26.1.2/build/libs/nerolink-fabric-26.1.2-$VERSION.jar" dist/
-          cp "fabric/versions/26.2/build/libs/nerolink-fabric-26.2-$VERSION.jar" dist/
-          cp "fabric/versions/26.3/build/libs/nerolink-fabric-26.3-$VERSION.jar" dist/
-          cp "neoforge/versions/1.20.4/build/libs/nerolink-neoforge-1.20.4-$VERSION.jar" dist/
-          cp "neoforge/versions/1.20.6/build/libs/nerolink-neoforge-1.20.6-$VERSION.jar" dist/
-          cp "neoforge/versions/1.21.1/build/libs/nerolink-neoforge-1.21.1-$VERSION.jar" dist/
-          cp "neoforge/versions/1.21.4/build/libs/nerolink-neoforge-1.21.4-$VERSION.jar" dist/
-          cp "neoforge/versions/1.21.5/build/libs/nerolink-neoforge-1.21.5-$VERSION.jar" dist/
-          cp "neoforge/versions/1.21.8/build/libs/nerolink-neoforge-1.21.8-$VERSION.jar" dist/
-          cp "neoforge/versions/1.21.10/build/libs/nerolink-neoforge-1.21.10-$VERSION.jar" dist/
-          cp "neoforge/versions/1.21.11/build/libs/nerolink-neoforge-1.21.11-$VERSION.jar" dist/
-          cp "neoforge/versions/26.1.2/build/libs/nerolink-neoforge-26.1.2-$VERSION.jar" dist/
-          cp "neoforge/versions/26.2/build/libs/nerolink-neoforge-26.2-$VERSION.jar" dist/
-          cp "neoforge/versions/26.3/build/libs/nerolink-neoforge-26.3-$VERSION.jar" dist/
-          cp "forge/versions/1.20/build/libs/nerolink-forge-1.20-$VERSION-all.jar" dist/
-          cp "forge/versions/1.20.1/build/libs/nerolink-forge-1.20.1-$VERSION-all.jar" dist/
-          cp "forge/versions/1.20.2/build/libs/nerolink-forge-1.20.2-$VERSION-all.jar" dist/
-          cp "forge/versions/1.20.3/build/libs/nerolink-forge-1.20.3-$VERSION-all.jar" dist/
-          cp "forge/versions/1.20.4/build/libs/nerolink-forge-1.20.4-$VERSION-all.jar" dist/
-          cp "forge/versions/1.20.6/build/libs/nerolink-forge-1.20.6-$VERSION-all.jar" dist/
-          cp "forge/versions/1.21.1/build/libs/nerolink-forge-1.21.1-$VERSION-all.jar" dist/
-          cp "forge/versions/1.21.4/build/libs/nerolink-forge-1.21.4-$VERSION-all.jar" dist/
-          cp "forge/versions/1.21.5/build/libs/nerolink-forge-1.21.5-$VERSION-all.jar" dist/
-          cp "forge/versions/1.21.8/build/libs/nerolink-forge-1.21.8-$VERSION-all.jar" dist/
-          cp "forge/versions/1.21.10/build/libs/nerolink-forge-1.21.10-$VERSION-all.jar" dist/
-          cp "forge/versions/1.21.11/build/libs/nerolink-forge-1.21.11-$VERSION-all.jar" dist/
-          cp "forge/versions/26.1.2/build/libs/nerolink-forge-26.1.2-$VERSION-all.jar" dist/
-          cp "forge/versions/26.2/build/libs/nerolink-forge-26.2-$VERSION-all.jar" dist/
-          cp "forge/versions/26.3/build/libs/nerolink-forge-26.3-$VERSION-all.jar" dist/
-          cp RELEASE_NOTES.md dist/
-          ls -l dist/
+      - name: Add release notes to the distribution
+        run: cp RELEASE_NOTES.md dist/
 
       - name: Upload distributables
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist
           path: dist/
+          overwrite: true
           if-no-files-found: error
           retention-days: 1
 
   publish:
     name: Publish ${{ matrix.label }} ${{ matrix.mc }} (CurseForge)
-    needs: [detect, build]
+    needs: [detect, package_release]
     if: needs.detect.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -301,50 +364,8 @@ jobs:
       # uploads + the retry loop in the CurseForge step below make the matrix
       # deterministic.
       max-parallel: 1
-      matrix:
-        include:
-          - { loader: fabric, mc: "1.20", games: "1.20", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.20.1", games: "1.20.1", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.20.2", games: "1.20.2", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.20.3", games: "1.20.3", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.20.4", games: "1.20.4", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.20.5", games: "1.20.5", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.20.6", games: "1.20.6", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.21.1", games: "1.21.1", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.21.4", games: "1.21.4", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.21.5", games: "1.21.5", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.21.8", games: "1.21.7,1.21.8", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.21.10", games: "1.21.9,1.21.10", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "1.21.11", games: "1.21.11", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "26.1.2", games: "26.1.2", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "26.2", games: "26.2", label: "Fabric", suffix: "" }
-          - { loader: fabric, mc: "26.3", games: "26.3", label: "Fabric", suffix: "" }
-          - { loader: neoforge, mc: "1.20.4", games: "1.20.4", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "1.20.6", games: "1.20.6", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "1.21.1", games: "1.21.1", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "1.21.4", games: "1.21.4", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "1.21.5", games: "1.21.5", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "1.21.8", games: "1.21.7,1.21.8", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "1.21.10", games: "1.21.9,1.21.10", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "1.21.11", games: "1.21.11", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "26.1.2", games: "26.1.2", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "26.2", games: "26.2", label: "NeoForge", suffix: "" }
-          - { loader: neoforge, mc: "26.3", games: "26.3", label: "NeoForge", suffix: "" }
-          - { loader: forge, mc: "1.20", games: "1.20", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.20.1", games: "1.20.1", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.20.2", games: "1.20.2", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.20.3", games: "1.20.3", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.20.4", games: "1.20.4", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.20.6", games: "1.20.6", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.21.1", games: "1.21.1", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.21.4", games: "1.21.4", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.21.5", games: "1.21.5", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.21.8", games: "1.21.7,1.21.8", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.21.10", games: "1.21.9,1.21.10", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "1.21.11", games: "1.21.11", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "26.1.2", games: "26.1.2", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "26.2", games: "26.2", label: "Forge", suffix: "-all" }
-          - { loader: forge, mc: "26.3", games: "26.3", label: "Forge", suffix: "-all" }
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+
     steps:
       - name: Download distributables
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -364,7 +385,7 @@ jobs:
           CF_API_TOKEN: ${{ secrets.CURSE_FORGE_API_TOKEN }}
           CF_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
           DISPLAY_NAME: NeroLink ${{ needs.detect.outputs.version }} - ${{ matrix.label }} ${{ matrix.mc }}
-          RELEASE_TYPE: ${{ needs.build.outputs.version_type }}
+          RELEASE_TYPE: ${{ needs.package_release.outputs.version_type }}
           MC_VERSION: ${{ matrix.games }}
           CF_LOADER: ${{ matrix.label }}
           JAR: dist/nerolink-${{ matrix.loader }}-${{ matrix.mc }}-${{ needs.detect.outputs.version }}${{ matrix.suffix }}.jar
@@ -424,7 +445,7 @@ jobs:
 
   release:
     name: GitHub Release + Sentry
-    needs: [detect, build, publish]
+    needs: [detect, package_release, publish]
     if: needs.detect.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -453,7 +474,7 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         with:
           release: nerolink@${{ needs.detect.outputs.version }}
-          environment: ${{ needs.build.outputs.environment }}
+          environment: ${{ needs.package_release.outputs.environment }}
 
       # One GitHub Release carrying all six jars. This also creates the v<version> tag that
       # `detect` reads as the release ledger - intentionally the LAST step, so a failed CurseForge
@@ -465,7 +486,7 @@ jobs:
           github-tag: v${{ needs.detect.outputs.version }}
           name: NeroLink ${{ needs.detect.outputs.version }}
           version: ${{ needs.detect.outputs.version }}
-          version-type: ${{ needs.build.outputs.version_type }}
+          version-type: ${{ needs.package_release.outputs.version_type }}
           changelog-file: dist/RELEASE_NOTES.md
           # dist/ holds exactly the six distributables (Forge = -all), so this glob is precise.
           files: dist/*.jar
