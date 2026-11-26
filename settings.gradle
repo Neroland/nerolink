@@ -53,7 +53,7 @@ stonecutter {
         // mc_floor_<v> / mc_ceiling_<v> in gradle.properties).
         def mcVersions = providers.gradleProperty('mc_versions').get().split(',')
         branch('fabric')   { versions(*mcVersions) }
-        branch('neoforge') { versions(*mcVersions.findAll { it !in ['1.20', '1.20.1', '1.20.2', '1.20.3', '1.20.5'] }) }
+        branch('neoforge') { versions(*mcVersions.findAll { it !in ['1.20', '1.20.1', '1.20.2', '1.20.3'] }) }
         branch('forge')    { versions(*mcVersions.findAll { it != '1.20.5' }) }
         vcsVersion = '26.2'   // reset point for commits / default checkout
     }

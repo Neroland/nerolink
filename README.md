@@ -10,7 +10,7 @@ server-validated actions. It is *a window, not a controller*: it never edits
 the world, never moves the player, and does nothing a player couldn't do
 standing at the relevant block in-game.
 
-Only **Neroland Core 1.23.0 or newer (below 2.0)** is required. Every other Nero mod is a
+Only **Neroland Core 1.24.0 or newer (below 2.0)** is required. Every other Nero mod is a
 progressive enhancement, discovered at connect time — a Core-only server is
 already useful (progression gates, alerts, server status). Companion clients
 speak the NeroLink API described in the ecosystem docs.
@@ -20,15 +20,17 @@ The current version is `mod_version` in `gradle.properties`. Changes are listed 
 discovery, snapshots, actions, WebSocket deltas, privacy endpoints and the relay
 tunnel. No gameplay content; this mod adds no blocks or items.
 
+Minecraft 1.20.5 on NeoForge requires loader 20.5.21-beta.
+
 ## Build targets
 
 - **Minecraft 1.20 series:** Fabric for 1.20 through 1.20.6, Forge for 1.20 through 1.20.4 and
-  1.20.6, and NeoForge for 1.20.4 and 1.20.6.
+  1.20.6, and NeoForge for 1.20.4 through 1.20.6.
 - **All three loaders:** 1.21.1, 1.21.4, 1.21.5, 1.21.8 (also runs on 1.21.7), 1.21.10 (also runs on 1.21.9),
   1.21.11, 26.1.2, 26.2 and 26.3
 - **Java:** 17 through Minecraft 1.20.4, 21 for 1.20.5 through 1.21.x, and 25 for 26.x.
 - Mod id: `nerolink` · package `za.co.neroland.nerolink`
-- **Requires:** Neroland Core `[1.23.0,2.0)` (loads before NeroLink)
+- **Requires:** Neroland Core `[1.24.0,2.0)` (loads before NeroLink)
 
 ## What the bridge does
 

@@ -18,7 +18,7 @@ def mcFloor = project.findProperty("mc_floor_${mc}") ?: mc
 def neoVersion = project.findProperty("neo_version_${mc}")
 def jeiVersion = project.findProperty("jei_version_${mc}")
 def emiFile = project.findProperty("emi_file_neoforge_${mc}")
-def nerolandcoreVersion = project.findProperty('nerolandcore_version')
+def nerolandcoreVersion = rootProject.property('nerolandcore_version')
 
 // This node's projectDir is <loader>/versions/<v>; the authoritative loader source +
 // templates live in the BRANCH root (neoforge/). Resolve branch-root paths via the parent.
@@ -160,6 +160,31 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
     into layout.buildDirectory.dir('generated/sources/modMetadata')
 }
 sourceSets.main.resources.srcDir generateModMetadata
+
+// NeoForge 20.5's POM predates the ModDevGradle variants. The original userdev jar supplies the
+// game patches and the original POM supplies dependencies for the compile and test classpaths.
+if (mc == '1.20.5') {
+    dependencies.components.withModule('net.neoforged:neoforge') { details ->
+        if (details.id.version == neoVersion) {
+            details.withVariant('sources') {
+                withDependencies { clear() }
+            }
+            details.addVariant('legacyModDevBundle') {
+                withCapabilities { addCapability('net.neoforged', 'neoforge-moddev-bundle', neoVersion) }
+                withFiles { addFile("neoforge-${neoVersion}-userdev.jar") }
+            }
+            ['compile', 'runtime'].each { pomVariant ->
+                details.addVariant("legacyModDev-${pomVariant}", pomVariant) {
+                    withCapabilities {
+                        removeCapability('net.neoforged', 'neoforge')
+                        addCapability('net.neoforged', 'neoforge-dependencies', neoVersion)
+                    }
+                    withFiles { removeAllFiles() }
+                }
+            }
+        }
+    }
+}
 
 neoForge {
     version = neoVersion

@@ -38,7 +38,7 @@ jobs:
       version: ${{ steps.check.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@v7 # v6
         with:
           # Tags are the release ledger - fetch them for the existence check.
           fetch-depth: 1
@@ -89,6 +89,7 @@ jobs:
             {"loader": "fabric", "mc": "26.2", "games": "26.2", "label": "Fabric", "suffix": ""},
             {"loader": "fabric", "mc": "26.3", "games": "26.3", "label": "Fabric", "suffix": ""},
             {"loader": "neoforge", "mc": "1.20.4", "games": "1.20.4", "label": "NeoForge", "suffix": ""},
+            {"loader": "neoforge", "mc": "1.20.5", "games": "1.20.5", "label": "NeoForge", "suffix": ""},
             {"loader": "neoforge", "mc": "1.20.6", "games": "1.20.6", "label": "NeoForge", "suffix": ""},
             {"loader": "neoforge", "mc": "1.21.1", "games": "1.21.1", "label": "NeoForge", "suffix": ""},
             {"loader": "neoforge", "mc": "1.21.4", "games": "1.21.4", "label": "NeoForge", "suffix": ""},
@@ -132,12 +133,12 @@ jobs:
       matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@v7 # v6
         with:
           fetch-depth: 1
 
       - name: Set up JDKs 17, 21 and 25
-        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5
+        uses: actions/setup-java@v6 # v5
         with:
           java-version: |
             17
@@ -146,7 +147,7 @@ jobs:
           distribution: "temurin"
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        uses: gradle/actions/setup-gradle@v6 # v4
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -190,7 +191,7 @@ jobs:
           fi
 
       - name: Upload this release cell
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v7 # v4
         with:
           name: build-${{ matrix.loader }}-${{ matrix.mc }}
           path: cell/
@@ -214,12 +215,12 @@ jobs:
       VERSION: ${{ needs.detect.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@v7 # v6
         with:
           fetch-depth: 1
 
       - name: Download all successful build cells
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@v8 # v4
         with:
           pattern: build-*
           path: built
@@ -342,7 +343,7 @@ jobs:
         run: cp RELEASE_NOTES.md dist/
 
       - name: Upload distributables
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v7 # v4
         with:
           name: dist
           path: dist/
@@ -368,7 +369,7 @@ jobs:
 
     steps:
       - name: Download distributables
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@v8 # v4
         with:
           name: dist
           path: dist
@@ -452,13 +453,13 @@ jobs:
       contents: write # create the GitHub Release + v<version> tag
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@v7 # v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Download distributables
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@v8 # v4
         with:
           name: dist
           path: dist
@@ -467,7 +468,7 @@ jobs:
       # must match what the SDK sends (NeroLinkTelemetry: release "nerolink@<mod_version>").
       # Requires repository secrets: SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT.
       - name: Create Sentry release
-        uses: getsentry/action-release@ff07929a6537bac57790c3451cf4d364aca38528 # v3
+        uses: getsentry/action-release@v3 # v3
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -480,7 +481,7 @@ jobs:
       # `detect` reads as the release ledger - intentionally the LAST step, so a failed CurseForge
       # upload above leaves no tag and a re-run retries cleanly instead of being skipped.
       - name: Publish GitHub Release
-        uses: Kir-Antipov/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659 # v3.3
+        uses: Kir-Antipov/mc-publish@v3 # v3.3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           github-tag: v${{ needs.detect.outputs.version }}
