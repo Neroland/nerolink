@@ -148,6 +148,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6 # v4
+        with:
+          cache-disabled: true
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -253,6 +255,8 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -eo pipefail
+
           mod="$(grep -E '^mod_id=' gradle.properties | cut -d= -f2)"
           group="$(grep -E '^mod_group_id=' gradle.properties | cut -d= -f2)"
           repository="https://maven.pkg.github.com/$GITHUB_REPOSITORY"
@@ -271,37 +275,58 @@ jobs:
           MAVEN_SETTINGS
 
           status_for() {
-            curl --silent --show-error --retry 3 --output /dev/null --write-out '%{http_code}' \
+            curl --silent --show-error --retry 4 --retry-delay 60 --retry-max-time 360 --connect-timeout 15 --max-time 90 --output /dev/null --write-out '%{http_code}' \
               --user "$GITHUB_ACTOR:$GITHUB_TOKEN" "$1"
           }
+
+          deploy_log="$RUNNER_TEMP/github-maven-deploy.log"
+          attempts=4
+          next_upload=0
 
           cells="$(jq -er '.include[] | [.loader, .mc, .suffix] | @tsv' <<< "$MATRIX")"
           while IFS=$'\t' read -r loader mc suffix; do
             artifact="$mod-$loader-$mc"
             url="$repository/$group_path/$artifact/$VERSION/$artifact-$VERSION"
-            jar_status="$(status_for "$url.jar")"
-            pom_status="$(status_for "$url.pom")"
-            case "$jar_status/$pom_status" in
-              200/200)
-                echo "$artifact $VERSION is already published"
-                continue
-                ;;
-              404/404) ;;
-              *)
-                echo "::error::Unexpected GitHub Packages status for $artifact $VERSION (jar $jar_status, POM $pom_status)"
-                exit 1
-                ;;
-            esac
-
             cell="built/build-$loader-$mc"
             jar="$cell/dist/$artifact-$VERSION$suffix.jar"
             if [ -n "$suffix" ]; then
               jar="$cell/maven.jar"
             fi
-            mvn --batch-mode --no-transfer-progress --settings "$settings" \
-              org.apache.maven.plugins:maven-deploy-plugin:3.1.3:deploy-file \
-              -DrepositoryId=github "-Durl=$repository" "-Dfile=$jar" \
-              "-DpomFile=$cell/maven.pom" -DretryFailedDeploymentCount=4
+
+            for ((attempt=1; attempt<=attempts; attempt++)); do
+              jar_status="$(status_for "$url.jar")"
+              pom_status="$(status_for "$url.pom")"
+              case "$jar_status/$pom_status" in
+                200/200)
+                  echo "$artifact $VERSION is already published"
+                  break
+                  ;;
+                404/404) ;;
+                *)
+                  echo "::error::Unexpected GitHub Packages status for $artifact $VERSION (jar $jar_status, POM $pom_status)"
+                  exit 1
+                  ;;
+              esac
+
+              if (( SECONDS < next_upload )); then
+                sleep "$((next_upload - SECONDS))"
+              fi
+              if mvn --batch-mode --no-transfer-progress --settings "$settings" \
+                  org.apache.maven.plugins:maven-deploy-plugin:3.1.3:deploy-file \
+                  -DrepositoryId=github "-Durl=$repository" "-Dfile=$jar" \
+                  "-DpomFile=$cell/maven.pom" -DretryFailedDeploymentCount=1 2>&1 | tee "$deploy_log"; then
+                next_upload=$((SECONDS + 2))
+                break
+              fi
+              if ! grep -Eiq 'status( code)?[[:space:]:=]+429|429[[:space:]:-]+too many requests' "$deploy_log" ||
+                  (( attempt == attempts )); then
+                echo "::error::GitHub Packages deployment failed for $artifact $VERSION (attempt $attempt/$attempts)"
+                exit 1
+              fi
+              delay=$((60 << (attempt - 1)))
+              echo "::warning::GitHub Packages rate limited $artifact $VERSION (HTTP 429). Retrying in $delay seconds."
+              sleep "$delay"
+            done
           done <<< "$cells"
 
       - name: Determine release channel
